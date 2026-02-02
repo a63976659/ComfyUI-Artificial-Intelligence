@@ -54,14 +54,15 @@ pip install -r requirements.txt
 
 ## 📥 模型下载与管理
 
-本插件的模型存放目录为：`ComfyUI/models/LLM`
+1. 本插件的翻译和对话模型存放目录为：`ComfyUI/models/LLM`
+2. 本插件的语音模型模型存放目录为：`ComfyUI/models/TTS`
 
 ### 方法 A：自动下载 (最简单)
 
 1. 在节点界面中，将 **"自动下载模型"** 开关设置为 `True`。
 2. 在 **"模型名称"** 列表中选择您想要的模型（例如 `Qwen2.5-7B-Instruct`）。
 3. 运行工作流（Queue Prompt）。
-4. 插件会自动检测本地是否存在该模型，若不存在，将通过国内镜像源自动下载并保存到 `models/LLM` 目录中。
+4. 插件会自动检测本地是否存在该模型，若不存在，将通过国内镜像源自动下载并保存到 `models/LLM` 或`models/TTS` 目录中。
 * *注意：首次下载可能需要一定时间，请关注控制台（Console）进度。*
 
 
