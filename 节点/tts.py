@@ -128,7 +128,8 @@ class Qwen_TTS_Node:
                 "说话人": (list(SPEAKER_MAPPING.keys()), {"default": "Vivian (中文-明亮微急)"}),
                 "情感指令": ("STRING", {"multiline": False, "default": "高兴", "placeholder": "例如：高兴、悲伤"}),
                 
-                "随机种子": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
+                # 改回标准名称 'seed' 以启用 ComfyUI 的自动控制组件 (Fixed/Increment/Randomize)
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
                 "温度": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 2.0, "step": 0.1}),
@@ -151,8 +152,8 @@ class Qwen_TTS_Node:
     CATEGORY = "💬 AI人工智能"
     DESCRIPTION = "【预设角色模式】\n基于官方9位预设角色。支持情感指令控制。"
 
-    def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, 随机种子, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
-        _set_seed(随机种子)
+    def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
+        _set_seed(seed)
         model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
 
         try:
@@ -202,7 +203,8 @@ class Qwen_TTS_VoiceDesign_Node:
                 "语言": (list(LANGUAGE_MAPPING.keys()), {"default": "自动识别 (Auto)"}),
                 "声音设计描述": ("STRING", {"multiline": False, "default": "体现撒娇稚嫩的萝莉女声，音调偏高且起伏明显。", "placeholder": "描述声音特征、性别、年龄"}),
                 
-                "随机种子": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
+                # 改回标准名称 'seed'
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
                 "温度": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 2.0, "step": 0.1}),
@@ -225,8 +227,8 @@ class Qwen_TTS_VoiceDesign_Node:
     CATEGORY = "💬 AI人工智能"
     DESCRIPTION = "【文本捏音模式】\n通过文字描述创造声音。"
 
-    def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, 随机种子, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
-        _set_seed(随机种子)
+    def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
+        _set_seed(seed)
         model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
 
         try:
@@ -278,7 +280,8 @@ class Qwen_TTS_VoiceClone_Node:
                 "情感指令": ("STRING", {"multiline": False, "default": "", "placeholder": "(可选) 例如：悲伤、开心"}),
                 "极速模式": ("BOOLEAN", {"default": False, "label": "极速模式 (忽略参考文本)"}),
                 
-                "随机种子": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
+                # 改回标准名称 'seed'
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
                 "温度": ("FLOAT", {"default": 0.7, "min": 0.1, "max": 2.0, "step": 0.1}),
@@ -306,9 +309,9 @@ class Qwen_TTS_VoiceClone_Node:
     CATEGORY = "💬 AI人工智能"
     DESCRIPTION = "【语音克隆模式】\n若'参考音频文本'为空，将自动强制启用极速模式以避免报错。"
 
-    def generate_voice_clone(self, 参考音频, 文本内容, 模型名称, 语言, 随机种子, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 子生成器_温度, 子生成器_Top_P, 子生成器_Top_K,
+    def generate_voice_clone(self, 参考音频, 文本内容, 模型名称, 语言, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 子生成器_温度, 子生成器_Top_P, 子生成器_Top_K,
                              参考音频文本="", 情感指令="", 极速模式=False):
-        _set_seed(随机种子)
+        _set_seed(seed)
         model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
 
         try:
