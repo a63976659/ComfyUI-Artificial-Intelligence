@@ -1,4 +1,14 @@
 torch
-transformers
+transformers>=4.57.3
+qwen-tts>=0.0.4
 huggingface_hub
 accelerate
+soundfile
+sentencepiece
+scipy
+einops
+librosa
+modelscope
+funasr
+ffmpeg-python>=0.2.0
+torchaudio
