@@ -160,7 +160,7 @@ class Qwen_TTS_Node:
         "6. seed：随机种子，固定后可复现相同的语音效果。\n"
         "7. 生成参数(温度/Top_P等)：控制生成的随机性和多样性。\n"
         "8. 输出模式：'拼合'将所有文本合成一条音频；'批次'将每行文本单独输出。\n"
-        "⚠️ 注意：节点运行结束后会自动卸载模型以释放显存。"
+        "⚠️ 注意：小显卡可以选择0.6B模型。"
     )
 
     def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
@@ -245,7 +245,7 @@ class Qwen_TTS_VoiceDesign_Node:
         "3. 模型名称：仅支持 1.7B VoiceDesign 模型。\n"
         "4. seed：不同的种子会产生略微不同的音色细节。\n"
         "5. 生成参数：调节温度等可改变声音的变化幅度。\n"
-        "⚠️ 注意：无需参考音频，完全由文字描述生成声音。"
+        "⚠️ 注意：第一次使用可以开启自动下载模型，默认下载源适合国内网络。"
     )
 
     def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
@@ -300,7 +300,7 @@ class Qwen_TTS_VoiceClone_Node:
                 
                 # --- 组件改为单行 ---
                 "参考音频文本": ("STRING", {"multiline": False, "default": "", "placeholder": "(可选) 输入参考音频的文字内容。若留空则强制使用极速模式。"}),
-                "情感指令": ("STRING", {"multiline": False, "default": "", "placeholder": "(可选) 例如：悲伤、开心"}),
+                "情感指令": ("STRING", {"multiline": False, "default": "生气", "placeholder": "(可选) 例如：悲伤、开心"}),
                 "极速模式": ("BOOLEAN", {"default": False, "label": "极速模式 (忽略参考文本)"}),
                 
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
@@ -338,7 +338,7 @@ class Qwen_TTS_VoiceClone_Node:
         "4. 情感指令：即使是克隆声音，也可以要求它用“悲伤”或“开心”的语气说话。\n"
         "5. 子生成器参数：克隆模式特有参数，用于微调声学细节的随机性，建议保持默认。\n"
         "6. 文本内容：希望克隆声音说出的新内容。\n"
-        "⚠️ 注意：必须连接 Load Audio 节点使用。"
+        "⚠️ 注意：必须连接 参考音频 节点使用。"
     )
 
     def generate_voice_clone(self, 参考音频, 文本内容, 模型名称, 语言, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 子生成器_温度, 子生成器_Top_P, 子生成器_Top_K,
