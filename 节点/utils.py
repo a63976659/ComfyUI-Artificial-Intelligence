@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import gc
 import folder_paths
 from huggingface_hub import snapshot_download as hf_snapshot_download
 
@@ -68,7 +69,7 @@ def save_config(model_name):
         print(f"[LLM] Config save failed: {e}")
 
 def load_llm_model(model_name, device, auto_download=False):
-    # (LLM 逻辑保持不变，默认使用镜像)
+    # (LLM 逻辑保持不变)
     from transformers import AutoModelForCausalLM, AutoTokenizer
     
     possible_paths = [
@@ -117,7 +118,9 @@ def load_llm_model(model_name, device, auto_download=False):
 def load_tts_model_data(model_name, device, auto_download=False, source="ModelScope"):
     """
     加载 TTS 模型
-    :param source: "ModelScope", "HuggingFace", "HF Mirror"
+    修复: 
+    1. device_map=device (明确指定为 "cuda" 或 "cpu")
+    2. 移除 model.to() 调用
     """
     target_folder_name = model_name.split("/")[-1] if "/" in model_name else model_name
     possible_paths = [
@@ -131,7 +134,6 @@ def load_tts_model_data(model_name, device, auto_download=False, source="ModelSc
             model_path = p
             break
     
-    # --- 下载逻辑 ---
     if not model_path:
         if auto_download:
             download_path = os.path.join(TTS_MODELS_DIR, target_folder_name)
@@ -156,9 +158,8 @@ def load_tts_model_data(model_name, device, auto_download=False, source="ModelSc
                 except Exception as e:
                     raise Exception(f"HF Mirror download failed: {e}")
 
-            else: # HuggingFace (Official)
+            else: # HuggingFace
                 print(f"\n[TTS] Downloading from HuggingFace (Official): {repo_id} -> {download_path}")
-                # 确保不使用镜像环境变量
                 if "HF_ENDPOINT" in os.environ:
                     del os.environ["HF_ENDPOINT"]
                 try:
@@ -169,26 +170,66 @@ def load_tts_model_data(model_name, device, auto_download=False, source="ModelSc
         else:
             raise FileNotFoundError(f"TTS Model {model_name} not found and auto_download is False.")
 
-    # --- 加载逻辑 ---
     global LOADED_TTS_MODELS
     if model_path not in LOADED_TTS_MODELS:
-        print(f"[TTS] Loading model from {model_path}...")
+        # device 是 "cuda" 或 "cpu" 字符串
+        print(f"[TTS] Loading model from {model_path} to {device}...")
         torch.cuda.empty_cache()
         
         if not HAS_QWEN_TTS:
             raise ImportError("Critical Dependency Missing: Please run 'pip install qwen-tts'")
 
         try:
+            if "cuda" in str(device):
+                dtype = torch.float16
+            else:
+                dtype = torch.float32
+            
+            # --- 关键修改 ---
+            # 1. 直接将 device_map 设为 "cuda" 或 "cpu"
+            # 2. Qwen3TTSModel 是一个 wrapper，没有 .to() 方法，
+            #    所以我们依赖 from_pretrained 的 device_map 参数来完成设备移动
             model = Qwen3TTSModel.from_pretrained(
                 model_path, 
-                device_map="auto", 
-                torch_dtype="auto"
+                device_map=device, # 直接传入设备字符串
+                torch_dtype=dtype
             )
+            
+            # 3. 移除了 model.to(device)
+            # model.eval() # wrapper 也不一定有 eval，默认就是推理模式
+            
             model.model_type_str = model_name 
             LOADED_TTS_MODELS[model_path] = model
-            print("[TTS] Model loaded successfully using Qwen3TTSModel.")
+            print("[TTS] Model loaded successfully.")
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Failed to load TTS model: {e}")
     
     return LOADED_TTS_MODELS[model_path]
+
+def unload_tts_model(model_name):
+    """
+    强制卸载指定模型并清空显存
+    """
+    target_folder_name = model_name.split("/")[-1] if "/" in model_name else model_name
+    possible_paths = [
+        os.path.join(TTS_MODELS_DIR, model_name),
+        os.path.join(TTS_MODELS_DIR, target_folder_name)
+    ]
+    
+    model_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            model_path = p
+            break
+    
+    global LOADED_TTS_MODELS
+    if model_path and model_path in LOADED_TTS_MODELS:
+        print(f"[TTS] Unloading model: {model_name} to free VRAM...")
+        del LOADED_TTS_MODELS[model_path]
+    
+    # 强制执行垃圾回收和显存清理
+    gc.collect()
+    torch.cuda.empty_cache()

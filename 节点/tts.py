@@ -3,7 +3,7 @@ import numpy as np
 import random
 import re
 import torchaudio
-from .utils import load_tts_model_data
+from .utils import load_tts_model_data, unload_tts_model # <--- 引入 unload 函数
 
 # ================= 映射字典 =================
 SPEAKER_MAPPING = {
@@ -128,7 +128,6 @@ class Qwen_TTS_Node:
                 "说话人": (list(SPEAKER_MAPPING.keys()), {"default": "Vivian (中文-明亮微急)"}),
                 "情感指令": ("STRING", {"multiline": False, "default": "高兴", "placeholder": "例如：高兴、悲伤"}),
                 
-                # 改回标准名称 'seed' 以启用 ComfyUI 的自动控制组件 (Fixed/Increment/Randomize)
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
@@ -150,7 +149,7 @@ class Qwen_TTS_Node:
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_speech"
     CATEGORY = "💬 AI人工智能"
-    DESCRIPTION = "【预设角色模式】\n基于官方9位预设角色。支持情感指令控制。"
+    DESCRIPTION = "【预设角色模式】\n基于官方9位预设角色。支持情感指令控制。\n⚠️ 运行结束后会自动卸载模型以释放显存。"
 
     def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
         _set_seed(seed)
@@ -187,6 +186,9 @@ class Qwen_TTS_Node:
 
         except Exception as e:
             raise Exception(f"CustomVoice 生成失败: {str(e)}")
+        finally:
+            # 无论成功失败，都卸载模型
+            unload_tts_model(模型名称)
 
 # ================= 节点 2: VoiceDesign (文本捏音) =================
 class Qwen_TTS_VoiceDesign_Node:
@@ -203,7 +205,6 @@ class Qwen_TTS_VoiceDesign_Node:
                 "语言": (list(LANGUAGE_MAPPING.keys()), {"default": "自动识别 (Auto)"}),
                 "声音设计描述": ("STRING", {"multiline": False, "default": "体现撒娇稚嫩的萝莉女声，音调偏高且起伏明显。", "placeholder": "描述声音特征、性别、年龄"}),
                 
-                # 改回标准名称 'seed'
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
@@ -225,7 +226,7 @@ class Qwen_TTS_VoiceDesign_Node:
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_voice_design"
     CATEGORY = "💬 AI人工智能"
-    DESCRIPTION = "【文本捏音模式】\n通过文字描述创造声音。"
+    DESCRIPTION = "【文本捏音模式】\n通过文字描述创造声音。\n⚠️ 运行结束后会自动卸载模型以释放显存。"
 
     def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
         _set_seed(seed)
@@ -259,6 +260,8 @@ class Qwen_TTS_VoiceDesign_Node:
 
         except Exception as e:
             raise Exception(f"VoiceDesign 生成失败: {str(e)}")
+        finally:
+            unload_tts_model(模型名称)
 
 # ================= 节点 3: VoiceClone (语音克隆) =================
 class Qwen_TTS_VoiceClone_Node:
@@ -280,7 +283,6 @@ class Qwen_TTS_VoiceClone_Node:
                 "情感指令": ("STRING", {"multiline": False, "default": "", "placeholder": "(可选) 例如：悲伤、开心"}),
                 "极速模式": ("BOOLEAN", {"default": False, "label": "极速模式 (忽略参考文本)"}),
                 
-                # 改回标准名称 'seed'
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffff}),
                 
                 # --- 主生成参数 ---
@@ -307,7 +309,7 @@ class Qwen_TTS_VoiceClone_Node:
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_voice_clone"
     CATEGORY = "💬 AI人工智能"
-    DESCRIPTION = "【语音克隆模式】\n若'参考音频文本'为空，将自动强制启用极速模式以避免报错。"
+    DESCRIPTION = "【语音克隆模式】\n若'参考音频文本'为空，将自动强制启用极速模式。\n⚠️ 运行结束后会自动卸载模型以释放显存。"
 
     def generate_voice_clone(self, 参考音频, 文本内容, 模型名称, 语言, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 子生成器_温度, 子生成器_Top_P, 子生成器_Top_K,
                              参考音频文本="", 情感指令="", 极速模式=False):
@@ -341,7 +343,6 @@ class Qwen_TTS_VoiceClone_Node:
                     final_x_vector_mode = True
                 ref_text_arg = None
             else:
-                # 只有在关闭极速模式且有文本时，才传入文本
                 if not final_x_vector_mode:
                     ref_text_arg = clean_ref_text
 
@@ -378,3 +379,5 @@ class Qwen_TTS_VoiceClone_Node:
 
         except Exception as e:
             raise Exception(f"VoiceClone 生成失败: {str(e)}")
+        finally:
+            unload_tts_model(模型名称)
