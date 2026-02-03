@@ -10,5 +10,5 @@ einops
 librosa
 modelscope
 funasr
-ffmpeg-python>=0.2.0
+ffmpeg-python
 torchaudio
