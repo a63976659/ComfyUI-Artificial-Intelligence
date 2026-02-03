@@ -1,6 +1,6 @@
 torch
-transformers>=4.57.3
-qwen-tts>=0.0.4
+transformers
+qwen-tts
 huggingface_hub
 accelerate
 soundfile
