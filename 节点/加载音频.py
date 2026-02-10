@@ -21,7 +21,7 @@ class 批量加载音频_Node:
     RETURN_TYPES = ("AUDIO", "INT")
     RETURN_NAMES = ("音频列表", "文件数量")
     FUNCTION = "load_batch_audio"
-    CATEGORY = "💬 AI人工智能/IO"
+    CATEGORY = "💬 AI人工智能/加载音频"
     DESCRIPTION = "从指定文件夹批量加载音频文件，支持递归搜索。"
 
     def load_batch_audio(self, 文件夹路径, 文件扩展名, 递归搜索):
@@ -79,7 +79,7 @@ class 加载音频_Node:
     RETURN_NAMES = ("音频",)
     OUTPUT_NODE = True
     FUNCTION = "load_audio"
-    CATEGORY = "💬 AI人工智能/IO"
+    CATEGORY = "💬 AI人工智能/加载音频"
     DESCRIPTION = "加载单个音频，支持自动获取时长、波形预览和裁剪。"
 
     def load_audio(self, 文件路径, 开始时间, 持续时间):
