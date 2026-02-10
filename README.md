@@ -54,8 +54,12 @@
 * 🔊 Qwen 语音克隆 (VoiceClone)用于声音模仿，给它一段 5-10 秒的某人录音，它就能用那个人的声音说出任何话。
 * 🧠 LLM 智能翻译 (Qwen)增加提示词润色功能。
 
+## 20260210
+* 🎵 加载音频 (Audio Loader)可直接播放音频的节点，带有裁剪功能。
+* 📂 批量加载音频 (Batch Loader)可直接选择音频文件夹，用于批处理音频。
+<img width="1311" height="785" alt="image" src="https://github.com/user-attachments/assets/4fee35ae-bb40-4781-a947-569fb1c9ab85" />
 
-
+  
 ---
 
 ## 💻 安装方法 (Installation)
