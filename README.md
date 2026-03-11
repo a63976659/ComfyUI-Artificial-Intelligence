@@ -188,6 +188,7 @@ sudo apt-get install sox ffmpeg libsox-fmt-all
 **作者**：a63976659  
 - [小红书：猪的飞行梦] 
 - [哔哩哔哩主页：https://space.bilibili.com/2114638644]
+- [![Bilibili](https://img.shields.io/badge/bilibili-猪的飞行梦-00A1D6?logo=bilibili&logoColor=white)](https://space.bilibili.com/2114638644)
 
 **致谢**：感谢所有测试用户和贡献者！
 如果你觉得插件还不错可以点个收藏。
