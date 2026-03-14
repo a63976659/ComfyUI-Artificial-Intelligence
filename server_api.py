@@ -4,9 +4,9 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 import folder_paths
+import cv2
 
-# ================= API 扩展: 文件浏览与流媒体 =================
-
+# ================= 1. 浏览文件夹 API =================
 @server.PromptServer.instance.routes.post("/qwen/browse_folder")
 async def browse_folder(request):
     try:
@@ -21,13 +21,13 @@ async def browse_folder(request):
     except Exception as e:
         return web.json_response({"error": str(e)})
 
+# ================= 2. 浏览文件 API =================
 @server.PromptServer.instance.routes.post("/qwen/browse_file")
 async def browse_file(request):
     try:
         root = tk.Tk()
         root.withdraw()
         root.attributes('-topmost', True)
-        # 允许选择媒体文件
         file_path = filedialog.askopenfilename(
             filetypes=[("Media Files", "*.mp4 *.mov *.avi *.mkv *.webm *.wav *.mp3 *.flac *.m4a *.ogg"), ("All Files", "*.*")]
         )
@@ -38,7 +38,7 @@ async def browse_file(request):
     except Exception as e:
         return web.json_response({"error": str(e)})
 
-# ================= 专属流媒体接口 (用于视频播放) =================
+# ================= 3. 专属流媒体 API (支持 FLAC/MKV 等) =================
 @server.PromptServer.instance.routes.get("/qwen/view_media")
 async def view_media(request):
     try:
@@ -46,14 +46,53 @@ async def view_media(request):
         if not file_path:
             return web.Response(status=400, text="No path provided")
         
-        # 兼容相对路径和绝对路径
         if not os.path.isabs(file_path):
             file_path = folder_paths.get_annotated_filepath(file_path) or os.path.abspath(file_path)
             
         if not os.path.isfile(file_path):
             return web.Response(status=404, text="File not found")
             
-        # FileResponse 自动处理 Accept-Ranges，完美支持 HTML5 Video 拖拽进度条
-        return web.FileResponse(file_path)
+        # 强制 MIME 类型识别，解决浏览器拒绝播放 flac/mkv 等格式的问题
+        ext = file_path.split('.')[-1].lower()
+        mime_type = None
+        
+        if ext == "flac": mime_type = "audio/flac"
+        elif ext == "ogg": mime_type = "audio/ogg"
+        elif ext == "wav": mime_type = "audio/wav"
+        elif ext == "mp3": mime_type = "audio/mpeg"
+        elif ext == "m4a": mime_type = "audio/mp4"
+        elif ext == "mp4": mime_type = "video/mp4"
+        elif ext == "webm": mime_type = "video/webm"
+        elif ext == "mkv": mime_type = "video/x-matroska"
+        elif ext == "mov": mime_type = "video/quicktime"
+        elif ext == "avi": mime_type = "video/x-msvideo"
+            
+        response = web.FileResponse(file_path)
+        if mime_type:
+            response.content_type = mime_type
+            
+        return response
     except Exception as e:
         return web.Response(status=500, text=str(e))
+
+# ================= 4. 获取视频/音频元数据 API (FPS) =================
+@server.PromptServer.instance.routes.get("/qwen/video_metadata")
+async def qwen_video_metadata(request):
+    file_path = request.query.get("path", "")
+    if not file_path:
+        return web.json_response({"fps": 0})
+    
+    if not os.path.isabs(file_path):
+        file_path = folder_paths.get_annotated_filepath(file_path) or os.path.abspath(file_path)
+        
+    if not os.path.isfile(file_path):
+        return web.json_response({"fps": 0})
+        
+    try:
+        cap = cv2.VideoCapture(file_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        return web.json_response({"fps": fps, "total_frames": total_frames})
+    except Exception as e:
+        return web.json_response({"fps": 0, "error": str(e)})
