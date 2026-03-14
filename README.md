@@ -1,7 +1,7 @@
 # 💬 ComfyUI-Artificial-Intelligence (本地大模型智能助手)
 
 **将强大的本地大语言模型（LLM）无缝集成到您的 ComfyUI 工作流中。无需 API Key，保护隐私，开箱即用。**
-
+- [![Bilibili](https://img.shields.io/badge/bilibili-猪的飞行梦-00A1D6?logo=bilibili&logoColor=white)](https://space.bilibili.com/2114638644)
 ## ✨ 核心优势
 
 * **🚀 零门槛，自动部署**：内置国内镜像加速下载，只需选择模型，系统自动拉取。
@@ -58,6 +58,11 @@
 * 🎵 加载音频 (Audio Loader)可直接播放音频的节点，带有裁剪功能。
 * 📂 批量加载音频 (Batch Loader)可直接选择音频文件夹，用于批处理音频。
 <img width="1311" height="785" alt="image" src="https://github.com/user-attachments/assets/4fee35ae-bb40-4781-a947-569fb1c9ab85" />
+
+## 20260314
+* 新增`🎬 加载视频 (Load Video)`和`✂️ 裁剪视频 (Crop Video)`节点，
+* 节点都能预览视频，加载视频节点可以提取当前帧图像，裁剪视频节点可以裁剪一段视频，用于输出图像或音频。
+* 优化`🎵 加载音频 (Audio Loader)`和`📂 批量加载音频 (Batch Loader)`，隐藏不必要的组件，加载音频节点支持更多格式播放与输出。
 
   
 ---
