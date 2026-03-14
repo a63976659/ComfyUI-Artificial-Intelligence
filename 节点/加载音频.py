@@ -2,8 +2,10 @@ import os
 import torchaudio
 import folder_paths
 import hashlib
+import subprocess
+import torch
 
-# ================= 节点 1: 批量加载音频 (保持不变) =================
+# ================= 节点 1: 批量加载音频 =================
 
 class 批量加载音频_Node:
     @classmethod
@@ -27,6 +29,13 @@ class 批量加载音频_Node:
     def load_batch_audio(self, 文件夹路径, 文件扩展名, 递归搜索):
         path = 文件夹路径.strip().strip('"')
         if not os.path.isabs(path): path = os.path.abspath(path)
+        
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path, exist_ok=True)
+            except:
+                pass
+                
         if not os.path.isdir(path): return ([], 0)
         
         extensions = tuple([f".{ext.strip().lower()}" for ext in 文件扩展名.split(",")])
@@ -60,7 +69,7 @@ class 批量加载音频_Node:
 
         return (batch_audio_data, len(batch_audio_data))
 
-# ================= 节点 2: 单个加载音频 (UI增强版) =================
+# ================= 节点 2: 单个加载音频 =================
 
 class 加载音频_Node:
     @classmethod
@@ -80,14 +89,12 @@ class 加载音频_Node:
     OUTPUT_NODE = True
     FUNCTION = "load_audio"
     CATEGORY = "💬 AI人工智能/加载音频"
-    DESCRIPTION = "加载单个音频，支持自动获取时长、波形预览和裁剪。"
+    DESCRIPTION = "加载音频或视频文件，自动提取音轨，支持波形预览和裁剪。"
 
     def load_audio(self, 文件路径, 开始时间, 持续时间):
-        # 处理路径：优先尝试作为绝对路径，如果不存在则尝试在 input 目录下查找
         path = 文件路径.strip().strip('"')
         
         if not os.path.isabs(path):
-            # 尝试在 ComfyUI 的 input 目录查找
             possible_path = folder_paths.get_annotated_filepath(path)
             if possible_path:
                 path = possible_path
@@ -95,52 +102,48 @@ class 加载音频_Node:
                 path = os.path.abspath(path)
             
         if not os.path.isfile(path):
-            raise FileNotFoundError(f"Audio file not found: {path}")
+            raise FileNotFoundError(f"未找到音频或视频文件: {path}")
 
         try:
-            info = torchaudio.info(path)
-            sr = info.sample_rate
-            total_frames = info.num_frames
-            
-            frame_offset = int(开始时间 * sr)
-            # 如果持续时间为0，则读取到最后；否则读取指定长度
-            num_frames = int(持续时间 * sr) if 持续时间 > 0 else -1
-            
-            if frame_offset >= total_frames:
-                frame_offset = 0
-            
-            waveform, sample_rate = torchaudio.load(path, frame_offset=frame_offset, num_frames=num_frames)
-            
-            # 保存预览 (temp)
+            temp_dir = folder_paths.get_temp_directory()
             params_hash = hashlib.md5(f"{path}_{开始时间}_{持续时间}".encode("utf-8")).hexdigest()
-            preview_filename = f"preview_{params_hash}.wav"
-            preview_dir = folder_paths.get_temp_directory()
-            preview_path = os.path.join(preview_dir, preview_filename)
+            temp_wav = os.path.join(temp_dir, f"audio_extract_{params_hash}.wav")
             
-            torchaudio.save(preview_path, waveform, sample_rate)
+            if not os.path.exists(temp_wav):
+                cmd = ["ffmpeg", "-y"]
+                if 开始时间 > 0:
+                    cmd.extend(["-ss", str(开始时间)])
+                cmd.extend(["-i", path])
+                if 持续时间 > 0:
+                    cmd.extend(["-t", str(持续时间)])
+                cmd.extend(["-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", temp_wav])
+                
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # 返回 ui 数据给 JS 使用 (temp 类型)
-            return {
-                "ui": {
-                    "audio": [{
-                        "filename": preview_filename,
-                        "subfolder": "",
-                        "type": "temp"
-                    }]
-                },
-                "result": ({
-                    "waveform": waveform.unsqueeze(0) if waveform.dim() == 2 else waveform, 
-                    "sample_rate": sample_rate,
-                    "filename": os.path.basename(path),
-                    "path": path
-                },)
-            }
+            if os.path.exists(temp_wav):
+                waveform, sample_rate = torchaudio.load(temp_wav)
+                if waveform.dim() == 2:
+                    waveform = waveform.unsqueeze(0)
+            else:
+                waveform_full, sample_rate = torchaudio.load(path)
+                total_frames = waveform_full.shape[1]
+                start_frame = int(开始时间 * sample_rate)
+                if start_frame >= total_frames: start_frame = 0
+                if 持续时间 > 0:
+                    end_frame = start_frame + int(持续时间 * sample_rate)
+                    if end_frame > total_frames: end_frame = total_frames
+                    waveform = waveform_full[:, start_frame:end_frame]
+                else:
+                    waveform = waveform_full[:, start_frame:]
+                if waveform.dim() == 2:
+                    waveform = waveform.unsqueeze(0)
+
+            return ({"waveform": waveform, "sample_rate": sample_rate},)
 
         except Exception as e:
             print(f"[LoadAudio Error] {e}")
-            raise Exception(f"Failed to load audio: {str(e)}")
+            raise Exception(f"Failed to load audio/video track: {str(e)}")
 
     @classmethod
     def IS_CHANGED(s, 文件路径, 开始时间, 持续时间):
         return hashlib.md5(f"{文件路径}_{开始时间}_{持续时间}".encode("utf-8")).hexdigest()
-
