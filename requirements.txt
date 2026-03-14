@@ -12,3 +12,5 @@ modelscope
 funasr
 ffmpeg-python
 torchaudio
+opencv-python
+numpy
