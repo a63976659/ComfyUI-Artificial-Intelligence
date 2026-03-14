@@ -18,20 +18,14 @@ app.registerExtension({
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
                 
                 const MIN_WIDTH = 400;
-                const MIN_HEIGHT = 400; // 增加了顶部标题，最小高度稍微调大
+                const MIN_HEIGHT = 400; 
 
-                // ==========================================
-                // 1. 彻底隐藏后端原生的输入框
-                // ==========================================
                 const pathWidget = this.widgets.find((w) => w.name === config.widgetName);
                 if (pathWidget) {
-                    // 强制隐藏原生的 HTML Input
                     if (pathWidget.inputEl) {
                         pathWidget.inputEl.style.display = "none";
                         pathWidget.inputEl.style.opacity = "0";
                     }
-                    
-                    // 将 ComfyUI 计算的尺寸设为 0，并将绘制函数置空，彻底隐形
                     pathWidget.computeSize = () => [0, -4];
                     pathWidget.draw = () => {};
 
@@ -44,16 +38,17 @@ app.registerExtension({
                 }
 
                 // ==========================================
-                // 2. UI 构建：增加居中的文件名显示
+                // UI 构建
                 // ==========================================
                 let videoDuration = 0;
                 let dragTarget = null;
                 let isHovering = null;
+                let lastLoadedPath = "";
+                let _isConfiguring = false; // 状态锁：判断是否正在恢复工作流
 
                 const container = document.createElement("div");
                 container.style.cssText = "display:flex; flex-direction:column; gap:6px; width:100%; height:100%; box-sizing:border-box; padding:8px; background:#1a1a1a; border-radius:4px; border:1px solid #333;";
                 
-                // [新增] 顶部居中的文件名显示组件
                 const titleBar = document.createElement("div");
                 titleBar.style.cssText = "background:#222; color:#eee; text-align:center; padding:6px 10px; border-radius:4px; font-size:13px; font-family:sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; border:1px solid #111;";
                 titleBar.innerText = "未选择视频";
@@ -64,7 +59,6 @@ app.registerExtension({
                 video.style.cssText = "width:100%; flex-grow:1; min-height:0; object-fit:contain; background:#000; border-radius:4px; display:block; cursor:pointer;";
                 video.onclick = () => { video.paused ? video.play() : video.pause(); };
                 
-                // 控制栏
                 const controlBar = document.createElement("div");
                 controlBar.style.cssText = "display:flex; gap:6px; height: 30px; width: 100%; align-items:center; flex-shrink:0;";
                 
@@ -87,7 +81,6 @@ app.registerExtension({
                 controlBar.appendChild(canvas);
                 controlBar.appendChild(fpsLabel);
                 
-                // 按照 标题 -> 视频 -> 控制栏 的顺序组装
                 container.appendChild(titleBar);
                 container.appendChild(video);
                 container.appendChild(controlBar);
@@ -141,7 +134,7 @@ app.registerExtension({
 
                     if (nodeData.name === "加载视频") {
                         const currWidget = this.widgets.find(w => w.name === "当前时间");
-                        const currTime = currWidget ? currWidget.value : 0;
+                        const currTime = currWidget ? parseFloat(currWidget.value) : 0;
                         const currX = currTime * pxPerSec;
 
                         ctx.strokeStyle = (dragTarget === 'curr' || isHovering === 'curr') ? "#fff" : "#00ffff";
@@ -153,8 +146,8 @@ app.registerExtension({
                     } else if (nodeData.name === "裁剪视频") {
                         const startWidget = this.widgets.find(w => w.name === "开始时间");
                         const durWidget = this.widgets.find(w => w.name === "持续时间");
-                        const sTime = startWidget ? startWidget.value : 0;
-                        const dTime = durWidget ? durWidget.value : 0;
+                        const sTime = startWidget ? parseFloat(startWidget.value) : 0;
+                        const dTime = durWidget ? parseFloat(durWidget.value) : 0;
                         let eTime = (dTime > 0.001) ? sTime + dTime : videoDuration;
                         if (eTime > videoDuration) eTime = videoDuration;
 
@@ -185,10 +178,10 @@ app.registerExtension({
                     if (nodeData.name === "裁剪视频" && !video.paused) {
                         const sW = this.widgets.find(w => w.name === "开始时间");
                         const dW = this.widgets.find(w => w.name === "持续时间");
-                        if (sW && dW && dW.value > 0.001) {
-                            if (video.currentTime >= sW.value + dW.value) {
+                        if (sW && dW && parseFloat(dW.value) > 0.001) {
+                            if (video.currentTime >= parseFloat(sW.value) + parseFloat(dW.value)) {
                                 video.pause();
-                                video.currentTime = sW.value;
+                                video.currentTime = parseFloat(sW.value);
                             }
                         }
                     }
@@ -210,18 +203,36 @@ app.registerExtension({
                     if (nodeData.name === "加载视频") {
                         dragTarget = 'curr';
                         updateWidgets(x, dragTarget);
-                        video.currentTime = (x / width) * videoDuration; 
+                        const cW = this.widgets.find(w => w.name === "当前时间");
+                        video.currentTime = cW ? (parseFloat(cW.value) || 0) : 0;
                     } else if (nodeData.name === "裁剪视频") {
                         const sW = this.widgets.find(w => w.name === "开始时间");
                         const dW = this.widgets.find(w => w.name === "持续时间");
-                        const sX = sW.value * pxPerSec;
-                        const eX = (dW.value > 0.001 ? sW.value + dW.value : videoDuration) * pxPerSec;
-
-                        if (Math.abs(x - eX) < threshold) dragTarget = 'end';
-                        else if (Math.abs(x - sX) < threshold) dragTarget = 'start';
-                        else { dragTarget = 'start'; updateWidgets(x, 'start_jump'); }
                         
-                        video.currentTime = (x / width) * videoDuration;
+                        const sVal = parseFloat(sW.value) || 0;
+                        const dVal = parseFloat(dW.value) || 0;
+                        const sX = sVal * pxPerSec;
+                        const eX = (dVal > 0.001 ? sVal + dVal : videoDuration) * pxPerSec;
+
+                        const distS = Math.abs(x - sX);
+                        const distE = Math.abs(x - eX);
+
+                        if (distS < threshold && distE < threshold) {
+                            dragTarget = distS < distE ? 'start' : 'end';
+                        } else if (distE < threshold) {
+                            dragTarget = 'end';
+                        } else if (distS < threshold) {
+                            dragTarget = 'start';
+                        } else {
+                            dragTarget = 'start'; 
+                            updateWidgets(x, 'start_jump');
+                        }
+                        
+                        if (dragTarget === 'end') {
+                            video.currentTime = (parseFloat(sW.value) || 0) + (parseFloat(dW.value) || 0);
+                        } else {
+                            video.currentTime = parseFloat(sW.value) || 0;
+                        }
                     }
                     requestAnimationFrame(draw);
                 });
@@ -231,8 +242,22 @@ app.registerExtension({
                     if (dragTarget) {
                         const x = getCanvasX(e);
                         updateWidgets(x, dragTarget);
-                        const clampedX = Math.max(0, Math.min(x, canvas.width));
-                        video.currentTime = (clampedX / canvas.width) * videoDuration;
+                        
+                        if (nodeData.name === "加载视频") {
+                            const cW = this.widgets.find(w => w.name === "当前时间");
+                            video.currentTime = cW ? (parseFloat(cW.value) || 0) : 0;
+                        } else if (nodeData.name === "裁剪视频") {
+                            const sW = this.widgets.find(w => w.name === "开始时间");
+                            const dW = this.widgets.find(w => w.name === "持续时间");
+                            const sVal = parseFloat(sW.value) || 0;
+                            const dVal = parseFloat(dW.value) || 0;
+                            
+                            if (dragTarget === 'end') {
+                                video.currentTime = sVal + dVal; 
+                            } else {
+                                video.currentTime = sVal; 
+                            }
+                        }
                     } 
                     
                     const rect = canvas.getBoundingClientRect();
@@ -243,13 +268,18 @@ app.registerExtension({
                         let nCursor = "crosshair", nHover = null;
 
                         if (nodeData.name === "加载视频") {
-                            const cX = this.widgets.find(w => w.name === "当前时间").value * pxPerSec;
+                            const cW = this.widgets.find(w => w.name === "当前时间");
+                            const cX = (parseFloat(cW.value) || 0) * pxPerSec;
                             if (Math.abs(x - cX) < 20) { nCursor = "ew-resize"; nHover = 'curr'; }
                         } else {
                             const sW = this.widgets.find(w => w.name === "开始时间");
                             const dW = this.widgets.find(w => w.name === "持续时间");
-                            const sX = sW.value * pxPerSec;
-                            const eX = (dW.value > 0.001 ? sW.value + dW.value : videoDuration) * pxPerSec;
+                            const sVal = parseFloat(sW.value) || 0;
+                            const dVal = parseFloat(dW.value) || 0;
+                            
+                            const sX = sVal * pxPerSec;
+                            const eX = (dVal > 0.001 ? sVal + dVal : videoDuration) * pxPerSec;
+                            
                             if (Math.abs(x - eX) < 20) { nCursor = "ew-resize"; nHover = 'end'; }
                             else if (Math.abs(x - sX) < 20) { nCursor = "ew-resize"; nHover = 'start'; }
                         }
@@ -260,7 +290,16 @@ app.registerExtension({
                     }
                 });
 
-                window.addEventListener("mouseup", () => { dragTarget = null; requestAnimationFrame(draw); });
+                window.addEventListener("mouseup", () => { 
+                    if (dragTarget) {
+                        if (nodeData.name === "裁剪视频") {
+                            const sW = this.widgets.find(w => w.name === "开始时间");
+                            if (sW) video.currentTime = parseFloat(sW.value) || 0;
+                        }
+                    }
+                    dragTarget = null; 
+                    requestAnimationFrame(draw); 
+                });
 
                 const updateWidgets = (mouseX, mode) => {
                     const width = canvas.width;
@@ -274,20 +313,29 @@ app.registerExtension({
                     } else if (nodeData.name === "裁剪视频") {
                         const sW = this.widgets.find(w => w.name === "开始时间");
                         const dW = this.widgets.find(w => w.name === "持续时间");
-                        let s = sW.value, d = dW.value;
-                        let e_time = (d > 0.001) ? s + d : videoDuration;
+                        
+                        let s = parseFloat(sW.value) || 0;
+                        let d = parseFloat(dW.value) || 0;
+                        let e_time = (d > 0.001) ? (s + d) : videoDuration;
 
                         if (mode === 'start' || mode === 'start_jump') {
                             let nS = parseFloat(time.toFixed(2));
-                            if (nS >= e_time) nS = e_time - 0.1;
-                            sW.value = Math.max(0, nS); sW.callback(sW.value);
+                            if (nS >= e_time) nS = Math.max(0, e_time - 0.05);
+                            
+                            sW.value = parseFloat(nS.toFixed(2)); 
+                            sW.callback(sW.value);
+                            
                             let nD = parseFloat((e_time - sW.value).toFixed(2));
-                            dW.value = Math.max(0, nD); dW.callback(dW.value);
+                            dW.value = Math.max(0, nD); 
+                            dW.callback(dW.value);
+
                         } else if (mode === 'end') {
                             let nE = parseFloat(time.toFixed(2));
-                            if (nE <= s) nE = s + 0.1;
+                            if (nE <= s) nE = s + 0.05;
+                            
                             let nD = parseFloat((Math.min(nE, videoDuration) - s).toFixed(2));
-                            dW.value = Math.max(0, nD); dW.callback(dW.value);
+                            dW.value = Math.max(0, nD); 
+                            dW.callback(dW.value);
                         }
                     }
                     requestAnimationFrame(draw);
@@ -316,10 +364,15 @@ app.registerExtension({
                         return;
                     }
                     
-                    // 提取并设置显示的纯文件名
                     titleBar.innerText = filePath.replace(/\\/g, '/').split('/').pop();
 
-                    if (!isInit) {
+                    // 【核心修复1】防止加载相同视频导致进度清零
+                    if (filePath === lastLoadedPath) return; 
+                    lastLoadedPath = filePath;
+
+                    // 【核心修复2】如果当前正在读取工作流配置，绝对不重置参数！
+                    const isGraphLoading = app.configuringGraph || _isConfiguring;
+                    if (!isInit && !isGraphLoading) {
                         if (nodeData.name === "加载视频") {
                             const cW = this.widgets.find(w => w.name === "当前时间");
                             if (cW) { cW.value = 0; cW.callback(0); }
@@ -349,13 +402,7 @@ app.registerExtension({
                 video.onloadedmetadata = () => {
                     videoDuration = video.duration;
                     
-                    if (nodeData.name === "裁剪视频") {
-                        const dW = this.widgets.find(w => w.name === "持续时间");
-                        if (dW && dW.value === 0) {
-                            dW.value = parseFloat(videoDuration.toFixed(2));
-                            if (dW.callback) dW.callback(dW.value);
-                        }
-                    }
+                    // 【核心修复3】移除强制覆盖 `持续时间` 的逻辑，保留 0 = 全长 的设定
                     
                     if (video.videoWidth > 0 && video.videoHeight > 0) {
                         const aspect = video.videoWidth / video.videoHeight;
@@ -365,19 +412,23 @@ app.registerExtension({
                         const videoH = (targetWidth - 16) / aspect; 
                         const baseHeight = this.computeSize([targetWidth, 0])[1];
                         
-                        // 包含新增的 titleBar 高度（约30px），所以增加了总高
                         let totalHeight = baseHeight + videoH + 95; 
                         if (totalHeight < MIN_HEIGHT) totalHeight = MIN_HEIGHT; 
                         
-                        this.setSize([targetWidth, totalHeight]);
+                        // 【核心修复4】如果在恢复工作流中，保护并保留用户自行设定的历史尺寸
+                        const isGraphLoading = app.configuringGraph || _isConfiguring;
+                        if (!isGraphLoading) {
+                            this.setSize([targetWidth, totalHeight]);
+                        }
                     }
 
+                    // 加载完毕后，画面精准跳转回之前保存的时间线
                     if (nodeData.name === "加载视频") {
                         const cW = this.widgets.find(w => w.name === "当前时间");
-                        if (cW && cW.value > 0) video.currentTime = cW.value;
+                        if (cW && parseFloat(cW.value) > 0) video.currentTime = parseFloat(cW.value);
                     } else if (nodeData.name === "裁剪视频") {
                         const sW = this.widgets.find(w => w.name === "开始时间");
-                        if (sW && sW.value > 0) video.currentTime = sW.value;
+                        if (sW && parseFloat(sW.value) > 0) video.currentTime = parseFloat(sW.value);
                     }
 
                     requestAnimationFrame(draw);
@@ -397,10 +448,12 @@ app.registerExtension({
 
                 const origOnConfigure = this.onConfigure;
                 this.onConfigure = function(info) {
+                    _isConfiguring = true; // 锁定状态，防止在此期间重置参数
                     if (origOnConfigure) origOnConfigure.apply(this, arguments);
                     if (pathWidget && pathWidget.value) {
                         updatePreview(pathWidget.value, true);
                     }
+                    _isConfiguring = false; // 解除锁定
                 };
 
                 setTimeout(() => { 
@@ -431,7 +484,10 @@ app.registerExtension({
                     onExecuted?.apply(this, arguments);
                 };
 
-                setTimeout(() => { this.setSize([MIN_WIDTH, MIN_HEIGHT]); }, 50);
+                // 【核心修复5】不再强制覆盖历史保存的尺寸
+                if (this.size[0] < MIN_WIDTH) this.size[0] = MIN_WIDTH;
+                if (this.size[1] < MIN_HEIGHT) this.size[1] = MIN_HEIGHT;
+
                 return r;
             };
         }
