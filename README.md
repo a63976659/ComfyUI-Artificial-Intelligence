@@ -80,9 +80,9 @@ git clone https://github.com/a63976659/ComfyUI-Artificial-Intelligence.git
 ```
 
 
-4. 进入插件文件夹并安装依赖：
+4. 进入插件文件夹并安装依赖（秋叶启动器无需执行这一步）：
 ```bash
-cd 您的仓库名
+cd ComfyUI-Artificial-Intelligence
 pip install -r requirements.txt
 
 ```
