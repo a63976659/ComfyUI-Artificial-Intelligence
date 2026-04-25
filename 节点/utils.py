@@ -16,7 +16,7 @@ except ImportError:
 try:
     from qwen_tts import Qwen3TTSModel
     HAS_QWEN_TTS = True
-except ImportError:
+except Exception:
     HAS_QWEN_TTS = False
 
 # ================= 配置与路径管理 =================

@@ -4,7 +4,11 @@ import tkinter as tk
 from tkinter import filedialog
 import os
 import folder_paths
-import cv2
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    HAS_CV2 = False
 
 # ================= 1. 浏览文件夹 API =================
 @server.PromptServer.instance.routes.post("/qwen/browse_folder")
@@ -88,6 +92,9 @@ async def qwen_video_metadata(request):
     if not os.path.isfile(file_path):
         return web.json_response({"fps": 0})
         
+    if not HAS_CV2:
+        return web.json_response({"error": "opencv-python 未安装，无法获取视频元数据"}, status=500)
+
     try:
         cap = cv2.VideoCapture(file_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
