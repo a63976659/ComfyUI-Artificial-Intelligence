@@ -42,6 +42,7 @@ class LLM_Chat_Node:
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("回复内容",)
+    OUTPUT_NODE = True
     FUNCTION = "chat"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = "基于本地大模型的智能对话节点 (隔离进程运行，不影响其它插件)。支持随机种子控制、温度调整和自动模型下载。"

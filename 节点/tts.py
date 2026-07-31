@@ -153,6 +153,7 @@ class Qwen_TTS_Node:
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
+    OUTPUT_NODE = True
     FUNCTION = "generate_speech"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
@@ -233,6 +234,7 @@ class Qwen_TTS_VoiceDesign_Node:
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
+    OUTPUT_NODE = True
     FUNCTION = "generate_voice_design"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
@@ -317,6 +319,7 @@ class Qwen_TTS_VoiceClone_Node:
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
+    OUTPUT_NODE = True
     FUNCTION = "generate_voice_clone"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (

@@ -162,6 +162,7 @@ class Gemma_Image_Node:
 
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("回复内容", "思考过程")
+    OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "💬 AI人工智能/谷歌系列"
     DESCRIPTION = (
@@ -228,6 +229,7 @@ class Gemma_Chat_Node:
 
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("回复内容", "思考过程")
+    OUTPUT_NODE = True
     FUNCTION = "chat"
     CATEGORY = "💬 AI人工智能/谷歌系列"
     DESCRIPTION = (
@@ -298,6 +300,7 @@ class Gemma_Audio_Node:
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("回复内容",)
+    OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "💬 AI人工智能/谷歌系列"
     DESCRIPTION = (
@@ -374,6 +377,7 @@ class Gemma_Video_Node:
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("回复内容",)
+    OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "💬 AI人工智能/谷歌系列"
     DESCRIPTION = (

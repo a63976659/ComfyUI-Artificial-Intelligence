@@ -12,7 +12,41 @@ app.registerExtension({
 
         if (nodeConfig[nodeData.name]) {
             const config = nodeConfig[nodeData.name];
-            
+
+            // ========== 拖拽加载: 把视频文件直接拖到节点上即可加载 (原浏览按钮功能不变) ==========
+            const ACCEPTED_EXT = ["mp4", "mov", "avi", "mkv", "webm"];
+            const hasFiles = (e) => !!(e && e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes("Files"));
+
+            nodeType.prototype.onDragOver = function (e) {
+                return hasFiles(e);
+            };
+
+            nodeType.prototype.onDragDrop = function (e) {
+                const files = e && e.dataTransfer ? e.dataTransfer.files : null;
+                if (!files || !files.length) return false;
+                const file = files[0];
+                const ext = (file.name.split(".").pop() || "").toLowerCase();
+                if (!ACCEPTED_EXT.includes(ext)) {
+                    alert("不支持的文件类型: ." + ext + "\n仅支持视频: " + ACCEPTED_EXT.join(", "));
+                    return false;
+                }
+                const node = this;
+                const body = new FormData();
+                body.append("file", file, file.name);
+                api.fetchApi("/qwen/upload_media", { method: "POST", body })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.path) {
+                            const pathWidget = node.widgets.find(w => w.name === config.widgetName);
+                            if (pathWidget) { pathWidget.value = data.path; pathWidget.callback(data.path); }
+                        } else if (data.error) {
+                            alert("加载失败: " + data.error);
+                        }
+                    })
+                    .catch(err => console.error("拖拽上传失败", err));
+                return true;
+            };
+
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;

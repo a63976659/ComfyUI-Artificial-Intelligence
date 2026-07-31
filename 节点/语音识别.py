@@ -148,6 +148,7 @@ class Qwen语音识别_Node:
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
     RETURN_NAMES = ("文本输出", "JSON详细数据", "带时间戳文本")
+    OUTPUT_NODE = True
     FUNCTION = "transcribe_audio"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
@@ -201,6 +202,7 @@ class Qwen批量语音识别_Node:
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
     RETURN_NAMES = ("合并文本", "详细日志文本", "带时间戳文本")
+    OUTPUT_NODE = True
     FUNCTION = "batch_transcribe"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (

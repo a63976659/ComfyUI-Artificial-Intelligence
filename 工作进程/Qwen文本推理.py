@@ -137,5 +137,11 @@ def handle_generate(req):
     return {"ok": True, "content": response}
 
 
+def handle_warmup(req):
+    """仅把模型加载进常驻子进程 (不做推理)，供实时翻译会话预热，避免首句才加载"""
+    load_model(req["model_path"])
+    return {"ok": True, "warmed": True}
+
+
 if __name__ == "__main__":
-    main_loop({"generate": handle_generate})
+    main_loop({"generate": handle_generate, "warmup": handle_warmup})

@@ -93,9 +93,18 @@ app.registerExtension({
             const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
             const node = this;
 
+            // 隐藏"录音文件"文本框: 文件名仅作内部传参 (临时目录)，不在节点上展示，
+            // 想永久保存请把"音频"输出连到 ComfyUI 原生"保存音频"节点
+            const fileWidget = node.widgets && node.widgets.find((w) => w.name === "录音文件");
+            if (fileWidget) {
+                fileWidget.type = "hidden";
+                fileWidget.computeSize = () => [0, -4];
+            }
+
             let mediaRecorder = null;
             let mediaStream = null;
             let chunks = [];
+            let recBusy = false; // 启动过程中防重复点击 (快速双击会得到空录音)
 
             const btn = node.addWidget("button", "🎙️ 开始录音", null, async () => {
                 // ===== 停止录音 =====
@@ -103,15 +112,18 @@ app.registerExtension({
                     mediaRecorder.stop();
                     return;
                 }
+                if (recBusy) return;
 
                 // ===== 开始录音 =====
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                     alert("当前环境不支持麦克风录音 (需 localhost 或 HTTPS 访问 ComfyUI)");
                     return;
                 }
+                recBusy = true;
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 } catch (e) {
+                    recBusy = false;
                     alert("无法访问麦克风，请检查浏览器授权: " + e.message);
                     return;
                 }
@@ -128,6 +140,10 @@ app.registerExtension({
                     try {
                         // 解码浏览器压缩音频并重编码为 WAV
                         const rawBlob = new Blob(chunks, { type: mediaRecorder.mimeType });
+                        // 空录音 (开始后立刻停止) 无法解码，提前给出可读提示
+                        if (chunks.length === 0 || rawBlob.size < 1024) {
+                            throw new Error("录音时间太短，请重新录制");
+                        }
                         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                         const audioBuffer = await audioCtx.decodeAudioData(await rawBlob.arrayBuffer());
                         audioCtx.close();
@@ -154,6 +170,7 @@ app.registerExtension({
                     }
                 };
                 mediaRecorder.start();
+                recBusy = false;
                 btn.name = "🟥 停止录音 (录制中...)";
                 node.setDirtyCanvas(true, false);
             });
@@ -254,7 +271,7 @@ app.registerExtension({
                     return w ? w.value : dft;
                 };
 
-                setRtLabel("⏳ 正在准备模型...");
+                setRtLabel("⏳ 正在加载模型 (首次较慢，请稍候)...");
                 const accumulator = findAccumulator(translator);
                 let session;
                 try {

@@ -40,6 +40,7 @@ class LLM_Translator_Node:
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("翻译结果",)
+    OUTPUT_NODE = True
     FUNCTION = "translate"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = "使用本地LLM模型进行多语言翻译 (隔离进程运行，不影响其它插件)。开启'提示词润色'可自动丰富细节，适合绘画Prompt生成。"

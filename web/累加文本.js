@@ -35,9 +35,9 @@ app.registerExtension({
 
             const incoming = detail.text || "";
             if (detail.append) {
-                // 实时会话: 每句译文追加一行 (首行不留空行)
+                // 实时会话: 每句成对追加 (句间留一个空行，与实时翻译显示区一致；首块不留空行)
                 const current = widget.value || "";
-                widget.value = current.trim() ? `${current}\n${incoming}` : incoming;
+                widget.value = current.trim() ? `${current}\n\n${incoming}` : incoming;
             } else {
                 // 图执行回写: 整体覆写为后端累加后的完整文本
                 widget.value = incoming;

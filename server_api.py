@@ -107,7 +107,7 @@ async def qwen_video_metadata(request):
 # ================= 5. 麦克风录音上传 API =================
 @server.PromptServer.instance.routes.post("/qwen/upload_record")
 async def upload_record(request):
-    """接收前端录音节点上传的 WAV 数据，保存到 input 目录并返回文件名"""
+    """接收前端录音节点上传的 WAV 数据，保存到临时目录并返回文件名 (重启自动清理，不永久占用 input)"""
     try:
         import time
         reader = await request.multipart()
@@ -116,7 +116,9 @@ async def upload_record(request):
             return web.json_response({"error": "未收到音频数据"}, status=400)
 
         filename = f"录音_{int(time.time())}.wav"
-        save_path = os.path.join(folder_paths.get_input_directory(), filename)
+        save_dir = folder_paths.get_temp_directory()
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
         with open(save_path, "wb") as f:
             while True:
                 chunk = await field.read_chunk()
@@ -124,5 +126,43 @@ async def upload_record(request):
                     break
                 f.write(chunk)
         return web.json_response({"filename": filename})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+# ================= 6. 拖拽媒体文件上传 API =================
+# 允许拖入加载的媒体扩展名 (与浏览文件对话框的过滤器保持一致)
+_ALLOWED_MEDIA_EXT = {
+    ".mp4", ".mov", ".avi", ".mkv", ".webm",
+    ".wav", ".mp3", ".flac", ".m4a", ".ogg",
+}
+
+@server.PromptServer.instance.routes.post("/qwen/upload_media")
+async def upload_media(request):
+    """接收前端拖拽到加载节点上的媒体文件，保存到临时目录并返回绝对路径 (重启自动清理，不永久占用 input)。
+    仅接受可读取加载的音视频类型，其它类型直接拒绝。"""
+    try:
+        import time
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None:
+            return web.json_response({"error": "未收到文件"}, status=400)
+
+        orig_name = os.path.basename(field.filename or "media")
+        base, ext = os.path.splitext(orig_name)
+        ext = ext.lower()
+        if ext not in _ALLOWED_MEDIA_EXT:
+            return web.json_response({"error": f"不支持的文件类型: {ext or '未知'}"}, status=400)
+
+        save_dir = folder_paths.get_temp_directory()
+        os.makedirs(save_dir, exist_ok=True)
+        save_name = f"{base}_{int(time.time() * 1000)}{ext}"
+        save_path = os.path.join(save_dir, save_name)
+        with open(save_path, "wb") as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                f.write(chunk)
+        return web.json_response({"path": save_path.replace("\\", "/")})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)

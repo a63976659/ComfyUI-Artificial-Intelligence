@@ -3,7 +3,7 @@
 实时翻译节点 (隔离环境子进程运行)
 支持三家国产模型: 腾讯 Hunyuan-MT-7B / 字节 Seed-X-PPO-7B / 阿里 Qwen 系列，
 翻译过程通过流式协议逐段推送到前端，在节点上打字机式实时显示。
-可选接入音频输入 (如麦克风录音节点)，内部先经 Qwen3-ASR 识别再翻译。
+只做语音翻译: 必须接入音频输入 (如麦克风录音节点)，内部先经 Qwen3-ASR 识别再翻译。
 """
 import os
 import re
@@ -135,7 +135,6 @@ class 实时翻译_Node:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "文本内容": ("STRING", {"multiline": True, "default": "一个女孩在雨中", "placeholder": "输入待翻译文本 (连接音频输入时忽略)"}),
                 "模型名称": (list(TRANSLATE_MODELS.keys()), {"default": "Hunyuan-MT-7B"}),
                 "目标语言": (list(TARGET_LANGUAGES.keys()), {"default": "英文"}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
@@ -151,47 +150,44 @@ class 实时翻译_Node:
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("翻译结果",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("翻译结果", "识别结果")
     FUNCTION = "translate"
     CATEGORY = "💬 AI人工智能/实时翻译"
     DESCRIPTION = (
         "实时翻译节点 (隔离进程运行)：支持腾讯 Hunyuan-MT / 字节 Seed-X / 阿里 Qwen 三家国产模型，"
-        "翻译过程在节点上打字机式实时显示。连接\"音频\"输入 (如麦克风录音节点) 时，"
-        "先经 Qwen3-ASR 识别再翻译。真·实时模式：连接麦克风录音节点后，点击录音节点上的"
-        "\"🌐 开始实时翻译\"按钮，无需点击运行，边说边自动断句翻译，译文持续显示在本节点上。"
+        "翻译过程在节点上打字机式实时显示。本节点专做语音翻译：请把音频接到\"音频\"输入 "
+        "(如 🎙️ 麦克风录音节点)，内部先经 Qwen3-ASR 识别再翻译。真·实时模式：连接麦克风录音节点后，"
+        "点击录音节点上的\"🌐 开始实时翻译\"按钮，无需点击运行，边说边自动断句翻译，译文持续显示在本节点上。"
     )
 
-    def translate(self, 文本内容, 模型名称, 目标语言, 自动下载模型, 最大生成长度,
+    def translate(self, 模型名称, 目标语言, 自动下载模型, 最大生成长度,
                   运行后立即卸载=True, 音频=None, 识别模型="Qwen3-ASR-0.6B", unique_id=None):
-        # 1. 确定原文: 连接音频时先做语音识别，否则使用文本输入
-        if 音频 is not None:
-            asr_model_path = resolve_tts_model(识别模型, 自动下载模型, source="ModelScope")
-            temp_path = _save_audio_to_temp(音频)
-            try:
-                asr_resp = run_worker(
-                    "asr",
-                    {
-                        "model_path": asr_model_path,
-                        "aligner_path": None,
-                        "audio_path": temp_path,
-                        "language": None,
-                        "context": None,
-                        "return_time_stamps": False,
-                    },
-                    unload_after=运行后立即卸载,
-                )
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            原文 = asr_resp.get("text", "").strip()
-            if not 原文:
-                raise ValueError("语音识别结果为空，请检查音频内容是否包含语音")
-            print(f"[实时翻译] 语音识别原文: {原文}")
-        else:
-            原文 = 文本内容
-        if not 原文.strip():
-            raise ValueError("待翻译文本为空")
+        # 1. 语音识别得到原文 (本节点只做语音翻译，必须接入音频)
+        if 音频 is None:
+            raise ValueError("请先把音频连接到\"音频\"输入 (如 🎙️ 麦克风录音节点)，本节点只做语音翻译")
+        asr_model_path = resolve_tts_model(识别模型, 自动下载模型, source="ModelScope")
+        temp_path = _save_audio_to_temp(音频)
+        try:
+            asr_resp = run_worker(
+                "asr",
+                {
+                    "model_path": asr_model_path,
+                    "aligner_path": None,
+                    "audio_path": temp_path,
+                    "language": None,
+                    "context": None,
+                    "return_time_stamps": False,
+                },
+                unload_after=运行后立即卸载,
+            )
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        原文 = asr_resp.get("text", "").strip()
+        if not 原文:
+            raise ValueError("语音识别结果为空，请检查音频内容是否包含语音")
+        print(f"[实时翻译] 语音识别原文: {原文}")
 
         # 2. 定位/下载翻译模型 (仅路径，加载在隔离子进程中完成)
         model_info = TRANSLATE_MODELS[模型名称]
@@ -213,7 +209,7 @@ class 实时翻译_Node:
                 )
 
         resp = run_worker("llm", payload, unload_after=运行后立即卸载, on_stream=on_stream)
-        return (resp.get("content", "").strip(),)
+        return (resp.get("content", "").strip(), 原文)
 
 
 # ================= 实时会话 (绕过图执行的持续翻译) =================
@@ -223,6 +219,8 @@ class 实时翻译_Node:
 #   后端常驻子进程 ASR + 流式翻译 -> send_sync 推送到翻译节点显示区。
 # 会话期间 asr/llm 子进程保持常驻 (unload_after=False)，停止时按需卸载。
 
+_DISPLAY_RECENT = 3  # 显示区只保留最近几句 (早期句子仍完整追加到“持续填充文本”节点)
+
 _SESSIONS = {}
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL_SECONDS = 3600  # 页面被直接关闭等异常场景下，过期会话自动清理
@@ -231,8 +229,9 @@ _routes = PromptServer.instance.routes
 
 
 def _push_display(sess):
-    """把会话累计文本推送到前端翻译节点显示区 (复用图执行的流式事件)"""
-    text = "\n\n".join(sess["lines"]) if sess["lines"] else "🎙️ 聆听中，请说话..."
+    """把会话累计文本推送到前端翻译节点显示区 (只展示最近 _DISPLAY_RECENT 句)"""
+    recent = sess["lines"][-_DISPLAY_RECENT:] if sess["lines"] else []
+    text = "\n\n".join(recent) if recent else "🎙️ 聆听中，请说话..."
     PromptServer.instance.send_sync(STREAM_EVENT, {"node": sess["node_id"], "text": text})
 
 
@@ -282,8 +281,8 @@ def _process_utterance(sess, audio_path):
         translation = resp.get("content", "").strip()
         sess["lines"][-1] = f"🗣 {source}\n➜ {translation}"
         _push_display(sess)
-        # 连有"持续填充文本"节点时，每句译文追加一行
-        push_append(sess.get("sink_id"), translation)
+        # 连有"持续填充文本"节点时，每句把原文 + 译文成对追加，实现双语同步记录
+        push_append(sess.get("sink_id"), source, translation)
         return {"source": source, "translation": translation}
 
 
@@ -306,6 +305,11 @@ async def _realtime_start(request):
             model_path = resolve_llm_model(model_info["repo"], bool(data.get("auto_download")))
             asr_path = resolve_tts_model(data.get("asr_model", "Qwen3-ASR-0.6B"),
                                          bool(data.get("auto_download")), source="ModelScope")
+            # 预热: 把 ASR + LLM 权重真正加载进常驻子进程再返回，
+            # 使前端"正在加载模型"标签持续到模型就绪，避免首句才加载造成"已在翻译中"的错觉
+            run_worker("asr", {"action": "warmup", "model_path": asr_path, "aligner_path": None},
+                       unload_after=False)
+            run_worker("llm", {"action": "warmup", "model_path": model_path}, unload_after=False)
             return model_path, asr_path
 
         model_path, asr_path = await asyncio.get_running_loop().run_in_executor(None, prepare)
@@ -386,10 +390,11 @@ async def _realtime_stop(request):
             sess = _SESSIONS.pop(data.get("session", ""), None)
         # 显式推送停止状态，避免显示区停留在"聆听中"造成未停止的错觉
         if sess is not None:
-            suffix = "\n\n⏹ 实时翻译已停止" if sess["lines"] else "⏹ 实时翻译已停止"
+            recent = sess["lines"][-_DISPLAY_RECENT:] if sess["lines"] else []
+            suffix = "\n\n⏹ 实时翻译已停止" if recent else "⏹ 实时翻译已停止"
             PromptServer.instance.send_sync(STREAM_EVENT, {
                 "node": sess["node_id"],
-                "text": ("\n\n".join(sess["lines"]) if sess["lines"] else "") + suffix,
+                "text": ("\n\n".join(recent) if recent else "") + suffix,
             })
         if data.get("unload"):
             def unload():
