@@ -45,6 +45,17 @@ try:
 except Exception as e:
     logger.warning(f"[ComfyUI-AI] TTS语音合成节点加载失败: {e}")
 
+# 语音识别节点 (隔离进程运行)
+try:
+    from .节点.语音识别 import Qwen语音识别_Node, Qwen批量语音识别_Node
+    NODE_CLASS_MAPPINGS["Qwen_ASR"] = Qwen语音识别_Node
+    NODE_CLASS_MAPPINGS["Qwen_ASR_Batch"] = Qwen批量语音识别_Node
+    NODE_DISPLAY_NAME_MAPPINGS["Qwen_ASR"] = "🎤 Qwen 语音识别 (ASR)"
+    NODE_DISPLAY_NAME_MAPPINGS["Qwen_ASR_Batch"] = "🎤 Qwen 批量语音识别 (ASR)"
+    logger.info("[ComfyUI-AI] 语音识别节点加载成功 [OK]")
+except Exception as e:
+    logger.warning(f"[ComfyUI-AI] 语音识别节点加载失败: {e}")
+
 # 音频加载节点
 try:
     from .节点.加载音频 import 批量加载音频_Node, 加载音频_Node
@@ -67,11 +78,53 @@ try:
 except Exception as e:
     logger.warning(f"[ComfyUI-AI] 视频节点加载失败: {e}")
 
+# Gemma 多模态节点 (隔离进程运行)
+try:
+    from .节点.gemma import Gemma_Image_Node, Gemma_Chat_Node, Gemma_Audio_Node, Gemma_Video_Node
+    NODE_CLASS_MAPPINGS["Gemma_Image_Understanding"] = Gemma_Image_Node
+    NODE_CLASS_MAPPINGS["Gemma_Chat"] = Gemma_Chat_Node
+    NODE_CLASS_MAPPINGS["Gemma_Audio_Understanding"] = Gemma_Audio_Node
+    NODE_CLASS_MAPPINGS["Gemma_Video_Understanding"] = Gemma_Video_Node
+    NODE_DISPLAY_NAME_MAPPINGS["Gemma_Image_Understanding"] = "🖼️ Gemma 图像理解 (Gemma-4)"
+    NODE_DISPLAY_NAME_MAPPINGS["Gemma_Chat"] = "💬 Gemma 多模态对话 (Gemma-4)"
+    NODE_DISPLAY_NAME_MAPPINGS["Gemma_Audio_Understanding"] = "🎧 Gemma 音频理解 (Gemma-4)"
+    NODE_DISPLAY_NAME_MAPPINGS["Gemma_Video_Understanding"] = "🎬 Gemma 视频理解 (Gemma-4)"
+    logger.info("[ComfyUI-AI] Gemma多模态节点加载成功 [OK]")
+except Exception as e:
+    logger.warning(f"[ComfyUI-AI] Gemma多模态节点加载失败: {e}")
+
+# 实时翻译节点 (隔离进程运行，流式显示)
+try:
+    from .节点.实时翻译 import 实时翻译_Node
+    NODE_CLASS_MAPPINGS["LLM_Realtime_Translator"] = 实时翻译_Node
+    NODE_DISPLAY_NAME_MAPPINGS["LLM_Realtime_Translator"] = "🌐 实时翻译 (Hunyuan/Seed-X/Qwen)"
+    logger.info("[ComfyUI-AI] 实时翻译节点加载成功 [OK]")
+except Exception as e:
+    logger.warning(f"[ComfyUI-AI] 实时翻译节点加载失败: {e}")
+
+# 麦克风录音节点
+try:
+    from .节点.录音 import 录音_Node
+    NODE_CLASS_MAPPINGS["Audio_Recorder"] = 录音_Node
+    NODE_DISPLAY_NAME_MAPPINGS["Audio_Recorder"] = "🎙️ 麦克风录音 (Recorder)"
+    logger.info("[ComfyUI-AI] 录音节点加载成功 [OK]")
+except Exception as e:
+    logger.warning(f"[ComfyUI-AI] 录音节点加载失败: {e}")
+
+# 持续填充文本节点
+try:
+    from .节点.累加文本 import 累加文本_Node
+    NODE_CLASS_MAPPINGS["Text_Accumulator"] = 累加文本_Node
+    NODE_DISPLAY_NAME_MAPPINGS["Text_Accumulator"] = "📝 持续填充文本 (Text Accumulator)"
+    logger.info("[ComfyUI-AI] 持续填充文本节点加载成功 [OK]")
+except Exception as e:
+    logger.warning(f"[ComfyUI-AI] 持续填充文本节点加载失败: {e}")
+
 # ================= 3. 加载总结 =================
 WEB_DIRECTORY = "./web"
 
 loaded = len(NODE_CLASS_MAPPINGS)
-total = 9
+total = 18
 if loaded == total:
     logger.info(f"[ComfyUI-AI] 所有 {total} 个节点加载成功 [OK]")
 elif loaded > 0:

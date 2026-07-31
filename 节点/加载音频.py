@@ -1,9 +1,50 @@
 import os
-import torchaudio
+import shutil
+import soundfile as sf
 import folder_paths
 import hashlib
 import subprocess
 import torch
+
+# ================= 通用: ffmpeg 定位 =================
+_FFMPEG_EXE = None
+
+def _get_ffmpeg_exe():
+    """定位 ffmpeg 可执行文件: 优先系统 PATH (秋叶整合包自带)，
+    官方便携版/桌面版无 ffmpeg 时回退 imageio-ffmpeg 内置的可执行文件。"""
+    global _FFMPEG_EXE
+    if _FFMPEG_EXE is None:
+        exe = shutil.which("ffmpeg")
+        if not exe:
+            try:
+                import imageio_ffmpeg
+                exe = imageio_ffmpeg.get_ffmpeg_exe()
+            except Exception:
+                raise RuntimeError(
+                    "未找到 ffmpeg: 请安装 ffmpeg 并加入系统 PATH，"
+                    "或在 ComfyUI 主环境执行 pip install imageio-ffmpeg"
+                )
+        _FFMPEG_EXE = exe
+    return _FFMPEG_EXE
+
+# ================= 通用: 音频读取 (不依赖 torchcodec) =================
+def _load_audio_as_tensor(path):
+    """使用 soundfile 读取音频，避免 torchaudio 的 torchcodec 后端依赖。
+    返回 (waveform, sample_rate)，waveform 形状为 (channels, frames)，与 torchaudio.load 保持一致。
+    soundfile 不支持的格式(如 m4a)会自动用 ffmpeg 转码为 wav 后再读取。"""
+    try:
+        data, sample_rate = sf.read(path, dtype="float32", always_2d=True)
+    except Exception:
+        temp_dir = folder_paths.get_temp_directory()
+        params_hash = hashlib.md5(path.encode("utf-8")).hexdigest()
+        temp_wav = os.path.join(temp_dir, f"sf_decode_{params_hash}.wav")
+        if not os.path.exists(temp_wav):
+            cmd = [_get_ffmpeg_exe(), "-y", "-i", path, "-vn", "-acodec", "pcm_s16le", temp_wav]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        data, sample_rate = sf.read(temp_wav, dtype="float32", always_2d=True)
+    # sf.read(always_2d=True) 返回 (frames, channels)，转置为 (channels, frames)
+    waveform = torch.from_numpy(data.T).contiguous()
+    return waveform, sample_rate
 
 # ================= 节点 1: 批量加载音频 =================
 
@@ -58,7 +99,7 @@ class 批量加载音频_Node:
         batch_audio_data = []
         for file_path in audio_files:
             try:
-                waveform, sample_rate = torchaudio.load(file_path)
+                waveform, sample_rate = _load_audio_as_tensor(file_path)
                 batch_audio_data.append({
                     "waveform": waveform.unsqueeze(0) if waveform.dim() == 2 else waveform,
                     "sample_rate": sample_rate,
@@ -110,7 +151,7 @@ class 加载音频_Node:
             temp_wav = os.path.join(temp_dir, f"audio_extract_{params_hash}.wav")
             
             if not os.path.exists(temp_wav):
-                cmd = ["ffmpeg", "-y"]
+                cmd = [_get_ffmpeg_exe(), "-y"]
                 if 开始时间 > 0:
                     cmd.extend(["-ss", str(开始时间)])
                 cmd.extend(["-i", path])
@@ -121,11 +162,11 @@ class 加载音频_Node:
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             if os.path.exists(temp_wav):
-                waveform, sample_rate = torchaudio.load(temp_wav)
+                waveform, sample_rate = _load_audio_as_tensor(temp_wav)
                 if waveform.dim() == 2:
                     waveform = waveform.unsqueeze(0)
             else:
-                waveform_full, sample_rate = torchaudio.load(path)
+                waveform_full, sample_rate = _load_audio_as_tensor(path)
                 total_frames = waveform_full.shape[1]
                 start_frame = int(开始时间 * sample_rate)
                 if start_frame >= total_frames: start_frame = 0

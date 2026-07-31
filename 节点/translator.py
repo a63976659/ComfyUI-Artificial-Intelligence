@@ -1,10 +1,7 @@
-import torch
-from .utils import get_installed_models, load_config, save_config, load_llm_model
+from .utils import get_installed_models, load_config, save_config, resolve_llm_model
+from .隔离环境 import run_worker
 
 class LLM_Translator_Node:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @classmethod
     def INPUT_TYPES(cls):
         installed = get_installed_models()
@@ -37,16 +34,17 @@ class LLM_Translator_Node:
             },
             "optional": {
                 "最大生成长度": ("INT", {"default": 1024}),
+                "运行后立即卸载": ("BOOLEAN", {"default": True}),
             }
         }
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("翻译结果",)
     FUNCTION = "translate"
-    CATEGORY = "💬 AI人工智能"
-    DESCRIPTION = "使用本地LLM模型进行多语言翻译。开启'提示词润色'可自动丰富细节，适合绘画Prompt生成。"
+    CATEGORY = "💬 AI人工智能/千问系列"
+    DESCRIPTION = "使用本地LLM模型进行多语言翻译 (隔离进程运行，不影响其它插件)。开启'提示词润色'可自动丰富细节，适合绘画Prompt生成。"
 
-    def translate(self, 文本内容, 模型名称, 目标语言, 提示词润色, 自动下载模型, 最大生成长度):
+    def translate(self, 文本内容, 模型名称, 目标语言, 提示词润色, 自动下载模型, 最大生成长度, 运行后立即卸载=True):
         save_config(模型名称)
         
         # === 核心逻辑修改：根据开关切换隐藏指令 ===
@@ -70,12 +68,8 @@ class LLM_Translator_Node:
 
         # ==========================================
 
-        # 简单处理下载路径猜测
-        download_repo_id = 模型名称
-        if 自动下载模型 and "Qwen" in 模型名称 and "/" not in 模型名称:
-             download_repo_id = f"Qwen/{模型名称}"
-
-        tokenizer, model = load_llm_model(模型名称, self.device, 自动下载模型)
+        # 定位/下载模型 (仅路径，加载在隔离子进程中完成)
+        model_path = resolve_llm_model(模型名称, 自动下载模型)
         
         # 语言映射字典
         lang_map = {
@@ -95,13 +89,17 @@ class LLM_Translator_Node:
         }
         target_lang_en = lang_map.get(目标语言, 目标语言)
 
-        messages = [
-            {"role": "system", "content": f"{system_instruction} Target Language: {target_lang_en}."},
-            {"role": "user", "content": 文本内容}
-        ]
-        text_input = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        model_inputs = tokenizer([text_input], return_tensors="pt").to(self.device)
-        
-        generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=最大生成长度, pad_token_id=tokenizer.eos_token_id)
-        generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
-        return (tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0],)
+        # 隔离环境子进程推理 (翻译保持确定性输出，不开启采样)
+        resp = run_worker(
+            "llm",
+            {
+                "model_path": model_path,
+                "messages": [
+                    {"role": "system", "content": f"{system_instruction} Target Language: {target_lang_en}."},
+                    {"role": "user", "content": 文本内容},
+                ],
+                "max_new_tokens": 最大生成长度,
+            },
+            unload_after=运行后立即卸载,
+        )
+        return (resp.get("content", ""),)

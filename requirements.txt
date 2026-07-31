@@ -1,6 +1,7 @@
+# 主环境依赖 (ComfyUI 进程内使用)
+# 注意: transformers / qwen-tts 已迁移至各模型家族的隔离虚拟环境中管理，
+#       版本锁定见 节点/隔离环境.py 中的 ENV_SPECS，首次运行相关节点时自动安装。
 torch
-transformers==4.57.3
-qwen-tts>=0.1.1
 huggingface_hub
 accelerate
 soundfile
@@ -9,8 +10,6 @@ scipy
 einops
 librosa
 modelscope
-funasr
-ffmpeg-python
 torchaudio
 opencv-python
 numpy

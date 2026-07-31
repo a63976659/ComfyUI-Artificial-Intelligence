@@ -103,3 +103,26 @@ async def qwen_video_metadata(request):
         return web.json_response({"fps": fps, "total_frames": total_frames})
     except Exception as e:
         return web.json_response({"fps": 0, "error": str(e)})
+
+# ================= 5. 麦克风录音上传 API =================
+@server.PromptServer.instance.routes.post("/qwen/upload_record")
+async def upload_record(request):
+    """接收前端录音节点上传的 WAV 数据，保存到 input 目录并返回文件名"""
+    try:
+        import time
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None:
+            return web.json_response({"error": "未收到音频数据"}, status=400)
+
+        filename = f"录音_{int(time.time())}.wav"
+        save_path = os.path.join(folder_paths.get_input_directory(), filename)
+        with open(save_path, "wb") as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                f.write(chunk)
+        return web.json_response({"filename": filename})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)

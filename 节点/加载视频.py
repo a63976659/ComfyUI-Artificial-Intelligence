@@ -2,10 +2,20 @@ import os
 import cv2
 import torch
 import numpy as np
-import torchaudio
+import soundfile as sf
 import folder_paths
 import hashlib
 import subprocess
+
+from .加载音频 import _get_ffmpeg_exe
+
+# ================= 通用: 音频读取 (不依赖 torchcodec) =================
+def _load_audio_as_tensor(path):
+    """使用 soundfile 读取音频，避免 torchaudio 的 torchcodec 后端依赖。
+    返回 (waveform, sample_rate)，waveform 形状为 (channels, frames)，与 torchaudio.load 保持一致。"""
+    data, sample_rate = sf.read(path, dtype="float32", always_2d=True)  # (frames, channels)
+    waveform = torch.from_numpy(data.T).contiguous()  # (channels, frames)
+    return waveform, sample_rate
 
 def extract_video_frames(path, start_time, end_time, single_frame=False):
     cap = cv2.VideoCapture(path)
@@ -48,7 +58,7 @@ def extract_audio(path, start_time, end_time):
         temp_wav = os.path.join(temp_dir, f"audio_{params_hash}.wav")
         
         if not os.path.exists(temp_wav):
-            cmd = ["ffmpeg", "-y"]
+            cmd = [_get_ffmpeg_exe(), "-y"]
             if start_time > 0:
                 cmd.extend(["-ss", str(start_time)])
             cmd.extend(["-i", path])
@@ -59,7 +69,7 @@ def extract_audio(path, start_time, end_time):
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
         if os.path.exists(temp_wav):
-            waveform, sample_rate = torchaudio.load(temp_wav)
+            waveform, sample_rate = _load_audio_as_tensor(temp_wav)
             if waveform.dim() == 2:
                 waveform = waveform.unsqueeze(0) 
             return {"waveform": waveform, "sample_rate": sample_rate}
@@ -162,7 +172,7 @@ class 裁剪视频_Node:
         
         if not os.path.exists(cropped_mp4_path):
             try:
-                cmd = ["ffmpeg", "-y", "-ss", str(开始时间), "-i", path]
+                cmd = [_get_ffmpeg_exe(), "-y", "-ss", str(开始时间), "-i", path]
                 if 持续时间 > 0:
                     cmd.extend(["-t", str(持续时间)])
                 cmd.extend(["-c", "copy", cropped_mp4_path])

@@ -1,7 +1,5 @@
-import torch
-import random
-import numpy as np
-from .utils import get_installed_models, load_config, save_config, load_llm_model
+from .utils import get_installed_models, load_config, save_config, resolve_llm_model
+from .隔离环境 import run_worker
 
 # 定义系统指令预设字典 (显示文本 -> 实际Prompt)
 SYSTEM_PROMPTS = {
@@ -14,9 +12,6 @@ SYSTEM_PROMPTS = {
 }
 
 class LLM_Chat_Node:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @classmethod
     def INPUT_TYPES(cls):
         installed = get_installed_models()
@@ -41,62 +36,41 @@ class LLM_Chat_Node:
                 "最大生成长度": ("INT", {"default": 2048, "min": 64, "max": 8192}),
                 # 修改：默认为 False (关闭)
                 "自动下载模型": ("BOOLEAN", {"default": False}),
+                "运行后立即卸载": ("BOOLEAN", {"default": True}),
             }
         }
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("回复内容",)
     FUNCTION = "chat"
-    CATEGORY = "💬 AI人工智能"
-    DESCRIPTION = "基于本地大模型的智能对话节点。支持随机种子控制、温度调整和自动模型下载。"
+    CATEGORY = "💬 AI人工智能/千问系列"
+    DESCRIPTION = "基于本地大模型的智能对话节点 (隔离进程运行，不影响其它插件)。支持随机种子控制、温度调整和自动模型下载。"
 
-    def chat(self, 提示词, 模型名称, seed, 系统指令类型, 温度_创造性, Top_P_采样率, 最大生成长度, 自动下载模型):
+    def chat(self, 提示词, 模型名称, seed, 系统指令类型, 温度_创造性, Top_P_采样率, 最大生成长度, 自动下载模型, 运行后立即卸载=True):
         # 1. 保存配置
         save_config(模型名称)
 
         # 2. 获取实际的系统指令内容
         actual_system_prompt = SYSTEM_PROMPTS.get(系统指令类型, "You are a helpful assistant.")
 
-        # 3. 设置随机种子
-        if seed is not None:
-            seed = seed & 0xffffffff
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+        # 3. 定位/下载模型 (仅路径，加载在隔离子进程中完成)
+        model_path = resolve_llm_model(模型名称, 自动下载模型)
 
-        # 4. 加载模型
-        tokenizer, model = load_llm_model(模型名称, self.device, 自动下载模型)
-
-        # 5. 构建对话
-        messages = [
-            {"role": "system", "content": actual_system_prompt},
-            {"role": "user", "content": 提示词}
-        ]
-        
-        text_input = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
+        # 4. 隔离环境子进程推理
+        resp = run_worker(
+            "llm",
+            {
+                "model_path": model_path,
+                "messages": [
+                    {"role": "system", "content": actual_system_prompt},
+                    {"role": "user", "content": 提示词},
+                ],
+                "seed": seed,
+                "do_sample": True,
+                "temperature": 温度_创造性,
+                "top_p": Top_P_采样率,
+                "max_new_tokens": 最大生成长度,
+            },
+            unload_after=运行后立即卸载,
         )
-        
-        # 6. 推理
-        model_inputs = tokenizer([text_input], return_tensors="pt").to(self.device)
-        
-        generated_ids = model.generate(
-            model_inputs.input_ids,
-            max_new_tokens=最大生成长度,
-            pad_token_id=tokenizer.eos_token_id,
-            do_sample=True,
-            temperature=温度_创造性,
-            top_p=Top_P_采样率
-        )
-        
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-        ]
-        
-        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        
-        return (response,)
+        return (resp.get("content", ""),)

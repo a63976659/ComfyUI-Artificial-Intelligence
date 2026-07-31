@@ -1,9 +1,13 @@
+import os
+import re
+import uuid
+import shutil
 import torch
 import numpy as np
-import random
-import re
 import torchaudio
-from .utils import load_tts_model_data, unload_tts_model
+import folder_paths
+from .utils import resolve_tts_model
+from .隔离环境 import run_worker
 
 # ================= 映射字典 =================
 SPEAKER_MAPPING = {
@@ -56,15 +60,6 @@ def _parse_text_with_pauses(text_input):
             segments.append(("text", remaining_text))
     return segments
 
-def _set_seed(seed):
-    if seed is not None:
-        seed = seed & 0xffffffff
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-
 def _process_ref_audio(audio_dict):
     """处理参考音频：转换为单声道并重采样到 16k"""
     waveform = audio_dict['waveform'] 
@@ -112,11 +107,21 @@ def _process_output(audio_segments_np, sr, output_mode):
             
         return ({"waveform": batch_tensor, "sample_rate": sr},)
 
+def _run_tts(模型名称, 自动下载模型, 下载源, payload, unload_after):
+    """公共流程: 定位/下载模型 -> 隔离环境子进程合成 -> 读回波形段 (.npy)"""
+    out_dir = os.path.join(folder_paths.get_temp_directory(), f"tts_{uuid.uuid4().hex}")
+    os.makedirs(out_dir, exist_ok=True)
+    payload["output_dir"] = out_dir
+    payload["model_path"] = resolve_tts_model(模型名称, 自动下载模型, source=下载源)
+    try:
+        resp = run_worker("tts", payload, unload_after=unload_after)
+        audio_segments_np = [np.load(p) for p in resp.get("segment_paths", [])]
+        return audio_segments_np, int(resp.get("sample_rate", 24000))
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+
 # ================= 节点 1: CustomVoice (预设角色) =================
 class Qwen_TTS_Node:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @classmethod
     def INPUT_TYPES(cls):
         presets = ["Qwen3-TTS-12Hz-1.7B-CustomVoice", "Qwen3-TTS-12Hz-0.6B-CustomVoice"]
@@ -142,13 +147,14 @@ class Qwen_TTS_Node:
                 # --- 下载相关 (放在最后) ---
                 "下载源": (["ModelScope", "HuggingFace", "HF Mirror"], {"default": "ModelScope"}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
+                "运行后立即卸载": ("BOOLEAN", {"default": True}),
             }
         }
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_speech"
-    CATEGORY = "💬 AI人工智能"
+    CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
         "【Qwen CustomVoice - 预设角色模式】\n"
         "✨ 使用介绍：\n"
@@ -163,10 +169,7 @@ class Qwen_TTS_Node:
         "⚠️ 注意：小显卡可以选择0.6B模型。"
     )
 
-    def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
-        _set_seed(seed)
-        model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
-
+    def generate_speech(self, 文本内容, 模型名称, 语言, 说话人, 情感指令, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 运行后立即卸载=True):
         try:
             target_speaker = SPEAKER_MAPPING.get(说话人, "Vivian")
             target_language = LANGUAGE_MAPPING.get(语言, "Auto")
@@ -178,34 +181,28 @@ class Qwen_TTS_Node:
             
             segments = _parse_text_with_pauses(文本内容)
             if not segments: raise ValueError("文本内容不能为空")
-            
-            audio_segments_np = []
-            sr = 24000 
 
-            for seg_type, content in segments:
-                if seg_type == "pause":
-                    if content > 0: audio_segments_np.append(np.zeros(int(content * sr), dtype=np.float32))
-                else:
-                    instruct_text = 情感指令.strip() if 情感指令.strip() else None
-                    wavs, current_sr = model.generate_custom_voice(
-                        text=[content], language=[target_language], speaker=[target_speaker],
-                        instruct=[instruct_text] if instruct_text else None, **gen_kwargs
-                    )
-                    sr = current_sr
-                    if len(wavs) > 0: audio_segments_np.append(wavs[0].squeeze() if wavs[0].ndim > 1 else wavs[0])
-
+            instruct_text = 情感指令.strip() if 情感指令.strip() else None
+            audio_segments_np, sr = _run_tts(
+                模型名称, 自动下载模型, 下载源,
+                {
+                    "mode": "custom_voice",
+                    "segments": segments,
+                    "language": target_language,
+                    "speaker": target_speaker,
+                    "instruct": instruct_text,
+                    "gen_kwargs": gen_kwargs,
+                    "seed": seed,
+                },
+                unload_after=运行后立即卸载,
+            )
             return _process_output(audio_segments_np, sr, 输出模式)
 
         except Exception as e:
             raise Exception(f"CustomVoice 生成失败: {str(e)}")
-        finally:
-            unload_tts_model(模型名称)
 
 # ================= 节点 2: VoiceDesign (文本捏音) =================
 class Qwen_TTS_VoiceDesign_Node:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @classmethod
     def INPUT_TYPES(cls):
         presets = ["Qwen3-TTS-12Hz-1.7B-VoiceDesign"]
@@ -230,13 +227,14 @@ class Qwen_TTS_VoiceDesign_Node:
                 # --- 下载相关 (放在最后) ---
                 "下载源": (["ModelScope", "HuggingFace", "HF Mirror"], {"default": "ModelScope"}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
+                "运行后立即卸载": ("BOOLEAN", {"default": True}),
             }
         }
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_voice_design"
-    CATEGORY = "💬 AI人工智能"
+    CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
         "【Qwen VoiceDesign - 文本捏音模式】\n"
         "✨ 使用介绍：\n"
@@ -248,10 +246,7 @@ class Qwen_TTS_VoiceDesign_Node:
         "⚠️ 注意：第一次使用可以开启自动下载模型，默认下载源适合国内网络。"
     )
 
-    def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型):
-        _set_seed(seed)
-        model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
-
+    def generate_voice_design(self, 文本内容, 模型名称, 语言, 声音设计描述, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 运行后立即卸载=True):
         try:
             target_language = LANGUAGE_MAPPING.get(语言, "Auto")
             gen_kwargs = {
@@ -262,32 +257,26 @@ class Qwen_TTS_VoiceDesign_Node:
             segments = _parse_text_with_pauses(文本内容)
             if not segments: raise ValueError("文本内容不能为空")
             if not 声音设计描述.strip(): raise ValueError("声音设计描述不能为空")
-            
-            audio_segments_np = []
-            sr = 24000 
-            for seg_type, content in segments:
-                if seg_type == "pause":
-                    if content > 0: audio_segments_np.append(np.zeros(int(content * sr), dtype=np.float32))
-                else:
-                    wavs, current_sr = model.generate_voice_design(
-                        text=[content], language=[target_language], 
-                        instruct=[声音设计描述.strip()], **gen_kwargs
-                    )
-                    sr = current_sr
-                    if len(wavs) > 0: audio_segments_np.append(wavs[0].squeeze() if wavs[0].ndim > 1 else wavs[0])
 
+            audio_segments_np, sr = _run_tts(
+                模型名称, 自动下载模型, 下载源,
+                {
+                    "mode": "voice_design",
+                    "segments": segments,
+                    "language": target_language,
+                    "instruct": 声音设计描述.strip(),
+                    "gen_kwargs": gen_kwargs,
+                    "seed": seed,
+                },
+                unload_after=运行后立即卸载,
+            )
             return _process_output(audio_segments_np, sr, 输出模式)
 
         except Exception as e:
             raise Exception(f"VoiceDesign 生成失败: {str(e)}")
-        finally:
-            unload_tts_model(模型名称)
 
 # ================= 节点 3: VoiceClone (语音克隆) =================
 class Qwen_TTS_VoiceClone_Node:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @classmethod
     def INPUT_TYPES(cls):
         presets = ["Qwen3-TTS-12Hz-1.7B-Base", "Qwen3-TTS-12Hz-0.6B-Base"]
@@ -322,13 +311,14 @@ class Qwen_TTS_VoiceClone_Node:
                 # --- 下载相关 (放在最后) ---
                 "下载源": (["ModelScope", "HuggingFace", "HF Mirror"], {"default": "ModelScope"}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
+                "运行后立即卸载": ("BOOLEAN", {"default": True}),
             }
         }
 
     RETURN_TYPES = ("AUDIO",)
     RETURN_NAMES = ("音频输出",)
     FUNCTION = "generate_voice_clone"
-    CATEGORY = "💬 AI人工智能"
+    CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
         "【Qwen VoiceClone - 语音克隆模式】\n"
         "✨ 使用介绍：\n"
@@ -342,10 +332,8 @@ class Qwen_TTS_VoiceClone_Node:
     )
 
     def generate_voice_clone(self, 参考音频, 文本内容, 模型名称, 语言, seed, 温度, Top_P, Top_K, 重复惩罚, 最大生成长度, 输出模式, 下载源, 自动下载模型, 子生成器_温度, 子生成器_Top_P, 子生成器_Top_K,
-                             参考音频文本="", 情感指令="", 极速模式=False):
-        _set_seed(seed)
-        model = load_tts_model_data(模型名称, self.device, 自动下载模型, source=下载源)
-
+                             参考音频文本="", 情感指令="", 极速模式=False, 运行后立即卸载=True):
+        ref_audio_path = None
         try:
             target_language = LANGUAGE_MAPPING.get(语言, "Auto")
             gen_kwargs = {
@@ -356,9 +344,15 @@ class Qwen_TTS_VoiceClone_Node:
                 "subtalker_top_k": 子生成器_Top_K,
                 "subtalker_dosample": True
             }
+
+            segments = _parse_text_with_pauses(文本内容)
+            if not segments: raise ValueError("文本内容不能为空")
             
-            # 1. 处理参考音频
+            # 1. 处理参考音频 (重采样到 16k 后存为 .npy 传给子进程)
             ref_wav_np, ref_sr = _process_ref_audio(参考音频)
+            ref_audio_path = os.path.join(folder_paths.get_temp_directory(), f"tts_ref_{uuid.uuid4().hex}.npy")
+            os.makedirs(os.path.dirname(ref_audio_path), exist_ok=True)
+            np.save(ref_audio_path, ref_wav_np.astype(np.float32))
             
             # 2. 逻辑修正：如果参考文本为空，强制使用极速模式
             clean_ref_text = 参考音频文本.strip()
@@ -376,38 +370,31 @@ class Qwen_TTS_VoiceClone_Node:
                 if not final_x_vector_mode:
                     ref_text_arg = clean_ref_text
 
-            print(f"[Qwen Clone] Extracting features... Mode={'X-Vector(Fast)' if final_x_vector_mode else 'ICL(Quality)'}")
-            
-            voice_prompt = model.create_voice_clone_prompt(
-                ref_audio=(ref_wav_np, ref_sr),
-                ref_text=ref_text_arg,
-                x_vector_only_mode=final_x_vector_mode
+            # 3. 隔离环境子进程合成
+            instruct_text = 情感指令.strip() if 情感指令 and 情感指令.strip() else None
+            audio_segments_np, sr = _run_tts(
+                模型名称, 自动下载模型, 下载源,
+                {
+                    "mode": "voice_clone",
+                    "segments": segments,
+                    "language": target_language,
+                    "instruct": instruct_text,
+                    "gen_kwargs": gen_kwargs,
+                    "seed": seed,
+                    "ref_audio_path": ref_audio_path,
+                    "ref_sample_rate": ref_sr,
+                    "ref_text": ref_text_arg,
+                    "x_vector_only": final_x_vector_mode,
+                },
+                unload_after=运行后立即卸载,
             )
-
-            # 3. 生成音频
-            segments = _parse_text_with_pauses(文本内容)
-            if not segments: raise ValueError("文本内容不能为空")
-            
-            audio_segments_np = []
-            sr = 24000 
-            for seg_type, content in segments:
-                if seg_type == "pause":
-                    if content > 0: audio_segments_np.append(np.zeros(int(content * sr), dtype=np.float32))
-                else:
-                    instruct_text = 情感指令.strip() if 情感指令 and 情感指令.strip() else None
-                    wavs, current_sr = model.generate_voice_clone(
-                        text=[content],
-                        language=[target_language],
-                        voice_clone_prompt=voice_prompt,
-                        instruct=[instruct_text] if instruct_text else None,
-                        **gen_kwargs
-                    )
-                    sr = current_sr
-                    if len(wavs) > 0: audio_segments_np.append(wavs[0].squeeze() if wavs[0].ndim > 1 else wavs[0])
-
             return _process_output(audio_segments_np, sr, 输出模式)
 
         except Exception as e:
             raise Exception(f"VoiceClone 生成失败: {str(e)}")
         finally:
-            unload_tts_model(模型名称)
+            if ref_audio_path:
+                try:
+                    os.remove(ref_audio_path)
+                except OSError:
+                    pass
