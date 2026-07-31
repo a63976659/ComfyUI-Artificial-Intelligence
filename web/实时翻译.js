@@ -6,6 +6,20 @@ import { api } from "../../scripts/api.js";
 const NODE_NAME = "LLM_Realtime_Translator";
 const STREAM_EVENT = "ai_realtime_translate";
 
+// 目标语言随模型联动: 从后端拉取"模型 -> 支持语言"映射 (与后端 TARGET_LANGUAGES 同一数据源)
+let LANG_BY_MODEL = null;
+let LANG_MAP_PROMISE = null;
+function loadLangMap() {
+    if (LANG_BY_MODEL) return Promise.resolve(LANG_BY_MODEL);
+    if (!LANG_MAP_PROMISE) {
+        LANG_MAP_PROMISE = api.fetchApi("/qwen/realtime/languages")
+            .then((r) => r.json())
+            .then((m) => { LANG_BY_MODEL = m; return m; })
+            .catch((err) => { console.warn("[实时翻译] 语言列表拉取失败", err); LANG_MAP_PROMISE = null; return null; });
+    }
+    return LANG_MAP_PROMISE;
+}
+
 app.registerExtension({
     name: "AI.RealtimeTranslator",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -43,11 +57,45 @@ app.registerExtension({
             if (this.size[0] < minWidth) this.size[0] = minWidth;
             if (this.size[1] < minHeight) this.size[1] = minHeight;
 
+            // —— 目标语言随模型自动收窄可选范围 ——
+            const node = this;
+            node._syncLangByModel = function () {
+                if (!LANG_BY_MODEL || !node.widgets) return;
+                const modelW = node.widgets.find((w) => w.name === "模型名称");
+                const langW = node.widgets.find((w) => w.name === "目标语言");
+                if (!modelW || !langW) return;
+                const allowed = LANG_BY_MODEL[modelW.value];
+                if (!allowed || !allowed.length) return;
+                langW.options.values = allowed;
+                if (!allowed.includes(langW.value)) {
+                    const fallback = allowed.includes("英文") ? "英文" : allowed[0];
+                    langW.value = fallback;
+                    if (langW.callback) langW.callback(fallback);
+                }
+            };
+            const modelW = this.widgets.find((w) => w.name === "模型名称");
+            if (modelW) {
+                const prevCb = modelW.callback;
+                modelW.callback = function () {
+                    const ret = prevCb ? prevCb.apply(this, arguments) : undefined;
+                    node._syncLangByModel();
+                    return ret;
+                };
+            }
+            loadLangMap().then(() => node._syncLangByModel());
+
             return r;
         };
     },
 
     setup() {
+        // 预取语言映射，并对已存在的实时翻译节点应用一次联动收窄
+        loadLangMap().then(() => {
+            for (const node of app.graph._nodes || []) {
+                if (node.comfyClass === NODE_NAME && node._syncLangByModel) node._syncLangByModel();
+            }
+        });
+
         // 流式增量: 按节点 id 定位并刷新显示区
         api.addEventListener(STREAM_EVENT, (event) => {
             const detail = event.detail;

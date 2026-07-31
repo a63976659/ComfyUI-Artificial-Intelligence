@@ -34,30 +34,77 @@ TRANSLATE_MODELS = {
 }
 
 # ================= 目标语言表 =================
-# 显示名 -> (英文名 [Hunyuan/Qwen 用], Seed-X 语言标签 [无则 None])
+# 显示名 -> {"en": 英文名 (Hunyuan/Qwen 提示词用), "seedx": Seed-X 语言标签 (不支持则 None),
+#           "models": 支持该语言的模型风格集合}
+# 模型风格: "hunyuan"=腾讯混元 (33 语)、"seedx"=字节 Seed-X (28 语)、"qwen"=阿里通义 (通用)。
+# 目标语言下拉会按所选模型自动收窄到其支持范围 (见前端 实时翻译.js 与 /qwen/realtime/languages)。
+_ALL_STYLES = ("hunyuan", "seedx", "qwen")
 TARGET_LANGUAGES = {
-    "中文": ("Chinese", "zh"),
-    "英文": ("English", "en"),
-    "日文": ("Japanese", "ja"),
-    "韩文": ("Korean", "ko"),
-    "法文": ("French", "fr"),
-    "德文": ("German", "de"),
-    "西班牙语": ("Spanish", "es"),
-    "俄语": ("Russian", "ru"),
-    "阿拉伯语": ("Arabic", "ar"),
-    "葡萄牙语": ("Portuguese", "pt"),
-    "意大利语": ("Italian", "it"),
-    "泰语": ("Thai", "th"),
-    "印地语": ("Hindi", None),
-    "越南语": ("Vietnamese", "vi"),
-    "印尼语": ("Indonesian", "id"),
-    "荷兰语": ("Dutch", "nl"),
-    "土耳其语": ("Turkish", "tr"),
-    "马来语": ("Malay", "ms"),
-    "芬兰语": ("Finnish", "fi"),
-    "波兰语": ("Polish", "pl"),
-    "乌克兰语": ("Ukrainian", "uk"),
+    # —— 三家模型共同支持 ——
+    "中文": {"en": "Chinese", "seedx": "zh", "models": _ALL_STYLES},
+    "英文": {"en": "English", "seedx": "en", "models": _ALL_STYLES},
+    "日文": {"en": "Japanese", "seedx": "ja", "models": _ALL_STYLES},
+    "韩文": {"en": "Korean", "seedx": "ko", "models": _ALL_STYLES},
+    "法文": {"en": "French", "seedx": "fr", "models": _ALL_STYLES},
+    "德文": {"en": "German", "seedx": "de", "models": _ALL_STYLES},
+    "西班牙语": {"en": "Spanish", "seedx": "es", "models": _ALL_STYLES},
+    "俄语": {"en": "Russian", "seedx": "ru", "models": _ALL_STYLES},
+    "阿拉伯语": {"en": "Arabic", "seedx": "ar", "models": _ALL_STYLES},
+    "葡萄牙语": {"en": "Portuguese", "seedx": "pt", "models": _ALL_STYLES},
+    "意大利语": {"en": "Italian", "seedx": "it", "models": _ALL_STYLES},
+    "泰语": {"en": "Thai", "seedx": "th", "models": _ALL_STYLES},
+    "越南语": {"en": "Vietnamese", "seedx": "vi", "models": _ALL_STYLES},
+    "印尼语": {"en": "Indonesian", "seedx": "id", "models": _ALL_STYLES},
+    "荷兰语": {"en": "Dutch", "seedx": "nl", "models": _ALL_STYLES},
+    "土耳其语": {"en": "Turkish", "seedx": "tr", "models": _ALL_STYLES},
+    "马来语": {"en": "Malay", "seedx": "ms", "models": _ALL_STYLES},
+    "波兰语": {"en": "Polish", "seedx": "pl", "models": _ALL_STYLES},
+    "乌克兰语": {"en": "Ukrainian", "seedx": "uk", "models": _ALL_STYLES},
+    # —— 混元 + 通义 (Seed-X 无此语) ——
+    "印地语": {"en": "Hindi", "seedx": None, "models": ("hunyuan", "qwen")},
+    # —— Seed-X + 通义 (混元无此语) ——
+    "芬兰语": {"en": "Finnish", "seedx": "fi", "models": ("seedx", "qwen")},
+    # —— 混元 + Seed-X ——
+    "捷克语": {"en": "Czech", "seedx": "cs", "models": ("hunyuan", "seedx")},
+    # —— 仅 Seed-X (欧洲语言) ——
+    "丹麦语": {"en": "Danish", "seedx": "da", "models": ("seedx",)},
+    "瑞典语": {"en": "Swedish", "seedx": "sv", "models": ("seedx",)},
+    "挪威语": {"en": "Norwegian", "seedx": "no", "models": ("seedx",)},
+    "匈牙利语": {"en": "Hungarian", "seedx": "hu", "models": ("seedx",)},
+    "罗马尼亚语": {"en": "Romanian", "seedx": "ro", "models": ("seedx",)},
+    "克罗地亚语": {"en": "Croatian", "seedx": "hr", "models": ("seedx",)},
+    # —— 仅混元 (繁中/粤语/中国少数民族语言/南亚语言等) ——
+    "繁体中文": {"en": "Traditional Chinese", "seedx": None, "models": ("hunyuan",)},
+    "粤语": {"en": "Cantonese", "seedx": None, "models": ("hunyuan",)},
+    "菲律宾语": {"en": "Filipino", "seedx": None, "models": ("hunyuan",)},
+    "高棉语": {"en": "Khmer", "seedx": None, "models": ("hunyuan",)},
+    "缅甸语": {"en": "Burmese", "seedx": None, "models": ("hunyuan",)},
+    "波斯语": {"en": "Persian", "seedx": None, "models": ("hunyuan",)},
+    "希伯来语": {"en": "Hebrew", "seedx": None, "models": ("hunyuan",)},
+    "乌尔都语": {"en": "Urdu", "seedx": None, "models": ("hunyuan",)},
+    "孟加拉语": {"en": "Bengali", "seedx": None, "models": ("hunyuan",)},
+    "泰米尔语": {"en": "Tamil", "seedx": None, "models": ("hunyuan",)},
+    "泰卢固语": {"en": "Telugu", "seedx": None, "models": ("hunyuan",)},
+    "马拉地语": {"en": "Marathi", "seedx": None, "models": ("hunyuan",)},
+    "古吉拉特语": {"en": "Gujarati", "seedx": None, "models": ("hunyuan",)},
+    "藏语": {"en": "Tibetan", "seedx": None, "models": ("hunyuan",)},
+    "哈萨克语": {"en": "Kazakh", "seedx": None, "models": ("hunyuan",)},
+    "蒙古语": {"en": "Mongolian", "seedx": None, "models": ("hunyuan",)},
+    "维吾尔语": {"en": "Uyghur", "seedx": None, "models": ("hunyuan",)},
 }
+
+_STYLE_CN = {"hunyuan": "Hunyuan-MT-7B", "seedx": "Seed-X-PPO-7B", "qwen": "Qwen 系列"}
+
+
+def _unsupported_lang_msg(style, 目标语言):
+    return (f"{_STYLE_CN.get(style, style)} 不支持目标语言\"{目标语言}\"，"
+            "请更换目标语言，或改用支持该语言的模型")
+
+
+def _languages_for_model(model_name):
+    """返回某模型 (按其 prompt 风格) 支持的目标语言显示名列表 (保持下拉顺序)"""
+    style = TRANSLATE_MODELS[model_name]["style"]
+    return [disp for disp, info in TARGET_LANGUAGES.items() if style in info["models"]]
 
 STREAM_EVENT = "ai_realtime_translate"
 
@@ -85,7 +132,11 @@ def _contains_chinese(text):
 
 def _build_payload(style, 原文, 目标语言, 最大生成长度):
     """按模型风格构造工作进程请求体"""
-    lang_en, seedx_tag = TARGET_LANGUAGES[目标语言]
+    info = TARGET_LANGUAGES[目标语言]
+    if style not in info["models"]:
+        raise ValueError(_unsupported_lang_msg(style, 目标语言))
+    lang_en = info["en"]
+    seedx_tag = info["seedx"]
 
     if style == "hunyuan":
         # Hunyuan-MT 官方模板: 中外互译用中文指令，外外互译用英文指令
@@ -101,11 +152,6 @@ def _build_payload(style, 原文, 目标语言, 最大生成长度):
 
     if style == "seedx":
         # Seed-X 官方格式: 原始 prompt 结尾必须带目标语言标签 (如 <zh>)
-        if seedx_tag is None:
-            raise ValueError(
-                f"Seed-X-PPO-7B 不支持目标语言\"{目标语言}\"，"
-                "请更换目标语言或改用 Hunyuan-MT-7B / Qwen 模型"
-            )
         prompt = f"Translate the following sentence into {lang_en}:\n{原文} <{seedx_tag}>"
         return {
             "prompt": prompt,
@@ -286,6 +332,12 @@ def _process_utterance(sess, audio_path):
         return {"source": source, "translation": translation}
 
 
+@_routes.get("/qwen/realtime/languages")
+async def _realtime_languages(request):
+    """返回每个模型支持的目标语言列表，供前端下拉按所选模型自动收窄可选范围"""
+    return web.json_response({m: _languages_for_model(m) for m in TRANSLATE_MODELS})
+
+
 @_routes.post("/qwen/realtime/start")
 async def _realtime_start(request):
     """创建实时翻译会话: 校验语言支持并解析模型路径 (可触发自动下载)"""
@@ -295,11 +347,8 @@ async def _realtime_start(request):
         目标语言 = data.get("target_lang", "英文")
         if 目标语言 not in TARGET_LANGUAGES:
             raise ValueError(f"不支持的目标语言: {目标语言}")
-        if model_info["style"] == "seedx" and TARGET_LANGUAGES[目标语言][1] is None:
-            raise ValueError(
-                f"Seed-X-PPO-7B 不支持目标语言\"{目标语言}\"，"
-                "请更换目标语言或改用 Hunyuan-MT-7B / Qwen 模型"
-            )
+        if model_info["style"] not in TARGET_LANGUAGES[目标语言]["models"]:
+            raise ValueError(_unsupported_lang_msg(model_info["style"], 目标语言))
 
         def prepare():
             model_path = resolve_llm_model(model_info["repo"], bool(data.get("auto_download")))
