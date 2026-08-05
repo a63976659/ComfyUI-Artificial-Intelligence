@@ -29,6 +29,16 @@ DEFAULT_GEMMA_MODEL = "gemma-4-12B-it"
 # 最大生成长度下拉选项: 上限按 Gemma 4 官方最大输出长度 32K 设定
 GEMMA_NEW_TOKEN_OPTIONS = ["1024", "2048", "4096", "8192", "16384", "32768"]
 
+# 抽帧档位: 快速/中等按固定帧数均匀抽帧, 详细抽取视频全部帧 (不降采样)
+FRAME_SAMPLE_MODES = ["快速", "中等", "详细"]
+FRAME_SAMPLE_COUNTS = {"快速": 8, "中等": 30}
+
+
+def _frame_sample_indices(total, 视频分析):
+    """按档位取帧下标: 详细档抽取全部帧, 其余按固定帧数均匀抽取"""
+    count = total if 视频分析 == "详细" else min(FRAME_SAMPLE_COUNTS[视频分析], total)
+    return np.linspace(0, total - 1, count).astype(int)
+
 # ================= 模型下载 =================
 
 def resolve_gemma_model(model_name, auto_download, source):
@@ -344,7 +354,7 @@ class Gemma_Chat_Node:
                 **{f"图像{i}": ("IMAGE",) for i in range(1, CHAT_MAX_IMAGE + 1)},
                 **{f"视频{i}": ("IMAGE",) for i in range(1, CHAT_MAX_VIDEO + 1)},
                 **{f"音频{i}": ("AUDIO",) for i in range(1, CHAT_MAX_AUDIO + 1)},
-                "抽帧数量": ("INT", {"default": 8, "min": 1, "max": 32}),
+                "视频分析": (FRAME_SAMPLE_MODES, {"default": "快速"}),
             },
         }
 
@@ -356,16 +366,16 @@ class Gemma_Chat_Node:
     DESCRIPTION = (
         "基于 Gemma 4 的多模态对话节点 (隔离进程运行)。\n"
         "可同时接入多个图像(最多9张)/视频(最多3段)/音频(最多3段，各≤30秒)，都不接入时为纯文本对话。\n"
-        "每类输入默认只显示 1 个，连接后自动追加下一个空槽位 (参考 ComfyUI-prompt-formula 的动态输入)。\n"
+        "每类输入默认只显示 1 个，连接后自动追加下一个空槽位 。\n"
         "每个媒体会标注【图像1】【视频1】【音频1】等编号，提示词里可直接引用对应编号。\n"
-        "视频接\"加载视频\"的图像序列输出，按\"抽帧数量\"均匀抽帧。支持思考模式。\n"
+        "视频接\"加载视频\"的图像序列输出，\"视频分析\"三档: 快速(8帧)/中等(30帧)/详细(全部帧)。支持思考模式。\n"
         "MiniMax H3 系统指令: 文生视频按提示词需求直接生成；参考生视频需先接入参考素材(图像/视频/音频)，"
         "否则无素材可分析。\n"
         "H3 指令输出较长，建议把\"最大生成长度\"选到 4096。"
     )
 
     def chat(self, 提示词, 系统指令类型, 模型名称, 量化方式, 最大生成长度, seed,
-             思考模式, 运行后立即卸载, 自动下载模型, 下载源, 抽帧数量=8, **kwargs):
+             思考模式, 运行后立即卸载, 自动下载模型, 下载源, 视频分析="快速", **kwargs):
         if not 提示词.strip():
             raise ValueError("请输入提示词")
 
@@ -389,9 +399,7 @@ class Gemma_Chat_Node:
         for i in range(1, CHAT_MAX_VIDEO + 1):
             vid = kwargs.get(f"视频{i}")
             if vid is not None:
-                total = vid.shape[0]
-                count = min(抽帧数量, total)
-                indices = np.linspace(0, total - 1, count).astype(int)
+                indices = _frame_sample_indices(vid.shape[0], 视频分析)
                 paths = []
                 for idx in indices:
                     p = _save_temp_image(vid[idx])
@@ -529,7 +537,7 @@ class Gemma_Video_Node:
                 "图像序列": ("IMAGE",),
                 "任务类型": (task_keys, {"default": task_keys[0]}),
                 "自定义问题": ("STRING", {"multiline": True, "default": "", "placeholder": "任务类型选\"自定义问题\"时在此输入..."}),
-                "抽帧数量": ("INT", {"default": 8, "min": 1, "max": 32}),
+                "视频分析": (FRAME_SAMPLE_MODES, {"default": "快速"}),
                 "模型名称": (all_models, {"default": DEFAULT_GEMMA_MODEL}),
                 "量化方式": (["4bit", "8bit", "bf16"], {"default": "4bit"}),
                 "视觉Token预算": (VISUAL_TOKEN_BUDGETS, {"default": "140"}),
@@ -551,15 +559,15 @@ class Gemma_Video_Node:
     CATEGORY = "💬 AI人工智能/谷歌系列"
     DESCRIPTION = (
         "基于 Gemma 4 的视频理解节点 (隔离进程运行)。\n"
-        "接\"加载视频\"的图像序列输出，均匀抽帧后理解视频内容，可选同时接入音频。\n"
-        "抽帧多时建议用低视觉Token预算(70/140)。\n"
+        "接\"加载视频\"的图像序列输出，按\"视频分析\"档位抽帧后理解视频内容，可选同时接入音频。\n"
+        "视频分析三档: 快速(8帧)/中等(30帧)/详细(抽取全部帧)，抽帧多时建议用低视觉Token预算(70/140)。\n"
         "注意: 画面理解不受语言限制，但可选音频输入不支持中文语音 "
         "(官方音频基准注明 Excluding Chinese)，中文音轨请断开音频或改用 Qwen 语音识别 (ASR) 节点。\n"
         "MiniMax H3 做同款视频: 分析参考视频后生成同款文生视频提示词，自定义问题可补充具体需求。\n"
         "输出较长，建议把\"最大生成长度\"选到 4096。"
     )
 
-    def analyze(self, 图像序列, 任务类型, 自定义问题, 抽帧数量, 模型名称, 量化方式,
+    def analyze(self, 图像序列, 任务类型, 自定义问题, 视频分析, 模型名称, 量化方式,
                 视觉Token预算, 最大生成长度, seed, 运行后立即卸载, 自动下载模型, 下载源, 音频=None):
         prompt = VIDEO_TASK_PROMPTS.get(任务类型)
         if prompt is None:
@@ -570,10 +578,8 @@ class Gemma_Video_Node:
             # H3 预设任务的提示词承诺参考用户需求，需把自定义问题一并传入
             prompt += f"\n\n用户附加要求: {自定义问题.strip()}"
 
-        # 均匀抽帧
-        total = 图像序列.shape[0]
-        count = min(抽帧数量, total)
-        indices = np.linspace(0, total - 1, count).astype(int)
+        # 按档位抽帧 (详细档抽取全部帧)
+        indices = _frame_sample_indices(图像序列.shape[0], 视频分析)
 
         tmp_files = [_save_temp_image(图像序列[i]) for i in indices]
         payload = {
