@@ -104,6 +104,18 @@ def _parse_output(raw, prefix_ids):
     return thinking, content
 
 
+def _decode_audio(path):
+    """用 librosa 预解码为 numpy 数组再传给 processor，避免 transformers 内部走
+    torchaudio/torchcodec 解码 (本机缺 libtorchcodec DLL 会崩溃)；librosa 走 soundfile。"""
+    import librosa
+    target_sr = 16000
+    fe = getattr(_PROCESSOR, "feature_extractor", None)
+    if fe is not None and getattr(fe, "sampling_rate", None):
+        target_sr = int(fe.sampling_rate)
+    audio_array, _ = librosa.load(path, sr=target_sr, mono=True)
+    return audio_array
+
+
 def handle_generate(req):
     import torch
 
@@ -116,22 +128,32 @@ def handle_generate(req):
 
     # 多模态内容: 官方最佳实践要求图像/音频放在文本之前
     content = []
-    image_paths = req.get("image_paths") or ([req["image_path"]] if req.get("image_path") else [])
-    if image_paths:
+    media_items = req.get("media") or []
+    if media_items:
+        # 多文件对话节点: 每个媒体前插入【图像1】等标签，提示词可按编号精确引用对应文件
         from PIL import Image
-        for p in image_paths:
-            img = Image.open(p).convert("RGB")
-            content.append({"type": "image", "image": img})
-    if req.get("audio_path"):
-        # 用 librosa 预解码为 numpy 数组再传给 processor，避免 transformers 内部走
-        # torchaudio/torchcodec 解码 (本机缺 libtorchcodec DLL 会崩溃)；librosa 走 soundfile。
-        import librosa
-        target_sr = 16000
-        fe = getattr(_PROCESSOR, "feature_extractor", None)
-        if fe is not None and getattr(fe, "sampling_rate", None):
-            target_sr = int(fe.sampling_rate)
-        audio_array, _ = librosa.load(req["audio_path"], sr=target_sr, mono=True)
-        content.append({"type": "audio", "audio": audio_array})
+        for item in media_items:
+            kind = item["kind"]
+            label = item.get("label", "")
+            if kind == "video":
+                content.append({"type": "text", "text": f"【{label}】以下是该视频按时间顺序抽取的帧:"})
+            else:
+                content.append({"type": "text", "text": f"【{label}】"})
+            for p in item["paths"]:
+                if kind == "audio":
+                    content.append({"type": "audio", "audio": _decode_audio(p)})
+                else:
+                    content.append({"type": "image", "image": Image.open(p).convert("RGB")})
+    else:
+        # 兼容字段 (图像/音频/视频理解节点仍走这里)
+        image_paths = req.get("image_paths") or ([req["image_path"]] if req.get("image_path") else [])
+        if image_paths:
+            from PIL import Image
+            for p in image_paths:
+                img = Image.open(p).convert("RGB")
+                content.append({"type": "image", "image": img})
+        if req.get("audio_path"):
+            content.append({"type": "audio", "audio": _decode_audio(req["audio_path"])})
     content.append({"type": "text", "text": req["prompt"]})
 
     messages = []

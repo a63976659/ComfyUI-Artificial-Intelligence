@@ -152,7 +152,7 @@ class Qwen语音识别_Node:
     FUNCTION = "transcribe_audio"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
-        "使用 Qwen3-ASR 进行语音识别 (隔离进程运行，不影响其它节点)。"
+        "使用 Qwen3-ASR 进行语音识别 (隔离进程运行，不影响其它节点)。\n"
         "开启\"生成时间戳\"需额外下载 Qwen3-ForcedAligner-0.6B 对齐模型。"
     )
 
@@ -206,7 +206,7 @@ class Qwen批量语音识别_Node:
     FUNCTION = "batch_transcribe"
     CATEGORY = "💬 AI人工智能/千问系列"
     DESCRIPTION = (
-        "批量处理多个音频片段 (隔离进程运行)，输出合并后的文本。"
+        "批量处理多个音频片段 (隔离进程运行)，输出合并后的文本。\n"
         "可直接连接\"批量加载音频\"节点，模型在整批处理期间只加载一次。"
     )
 
