@@ -80,15 +80,17 @@ except Exception as e:
 
 # Gemma 多模态节点 (隔离进程运行)
 try:
-    from .节点.gemma import Gemma_Image_Node, Gemma_Chat_Node, Gemma_Audio_Node, Gemma_Video_Node
+    from .节点.gemma import Gemma_Image_Node, Gemma_Chat_Node, Gemma_Audio_Node, Gemma_Video_Node, Gemma_H3_Template_Node
     NODE_CLASS_MAPPINGS["Gemma_Image_Understanding"] = Gemma_Image_Node
     NODE_CLASS_MAPPINGS["Gemma_Chat"] = Gemma_Chat_Node
     NODE_CLASS_MAPPINGS["Gemma_Audio_Understanding"] = Gemma_Audio_Node
     NODE_CLASS_MAPPINGS["Gemma_Video_Understanding"] = Gemma_Video_Node
+    NODE_CLASS_MAPPINGS["Gemma_H3_Prompt_Template"] = Gemma_H3_Template_Node
     NODE_DISPLAY_NAME_MAPPINGS["Gemma_Image_Understanding"] = "🖼️ Gemma 图像理解 (Gemma-4)"
     NODE_DISPLAY_NAME_MAPPINGS["Gemma_Chat"] = "💬 Gemma 多模态对话 (Gemma-4)"
     NODE_DISPLAY_NAME_MAPPINGS["Gemma_Audio_Understanding"] = "🎧 Gemma 音频理解 (Gemma-4)"
     NODE_DISPLAY_NAME_MAPPINGS["Gemma_Video_Understanding"] = "🎬 Gemma 视频理解 (Gemma-4)"
+    NODE_DISPLAY_NAME_MAPPINGS["Gemma_H3_Prompt_Template"] = "📋 Gemma H3 提示词模版 (Gemma-4)"
     logger.info("[ComfyUI-AI] Gemma多模态节点加载成功 [OK]")
 except Exception as e:
     logger.warning(f"[ComfyUI-AI] Gemma多模态节点加载失败: {e}")
@@ -124,7 +126,7 @@ except Exception as e:
 WEB_DIRECTORY = "./web"
 
 loaded = len(NODE_CLASS_MAPPINGS)
-total = 18
+total = 19
 if loaded == total:
     logger.info(f"[ComfyUI-AI] 所有 {total} 个节点加载成功 [OK]")
 elif loaded > 0:
