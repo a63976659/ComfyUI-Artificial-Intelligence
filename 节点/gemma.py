@@ -25,9 +25,8 @@ if HAS_MODELSCOPE:
 
 DEFAULT_GEMMA_MODEL = "gemma-4-12B-it"
 
-# 最大生成长度范围: 上限按 Gemma 4 官方最大输出长度 32K 设定
-GEMMA_MIN_NEW_TOKENS = 1024
-GEMMA_MAX_NEW_TOKENS = 32768
+# 最大生成长度下拉选项: 上限按 Gemma 4 官方最大输出长度 32K 设定
+GEMMA_NEW_TOKEN_OPTIONS = ["1024", "2048", "4096", "8192", "16384", "32768"]
 
 # ================= 模型下载 =================
 
@@ -233,10 +232,10 @@ class Gemma_Image_Node:
                 "运行后立即卸载": ("BOOLEAN", {"default": True}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
                 "下载源": (["ModelScope", "HF Mirror", "HuggingFace"], {"default": "ModelScope"}),
+                "最大生成长度": (GEMMA_NEW_TOKEN_OPTIONS, {"default": "1024"}),
             },
             "optional": {
                 "图像2": ("IMAGE",),
-                "最大生成长度": ("INT", {"default": 1024, "min": GEMMA_MIN_NEW_TOKENS, "max": GEMMA_MAX_NEW_TOKENS}),
             },
         }
 
@@ -252,7 +251,7 @@ class Gemma_Image_Node:
         "OCR 建议用高视觉Token预算(1120)，打标/描述用中低预算。\n"
         "MiniMax H3 任务: 图生视频用图像1作首帧；首尾帧视频需同时接图像1(首帧)和图像2(尾帧)，"
         "自定义问题可补充具体需求。\n"
-        "H3 任务输出较长，建议把\"最大生成长度\"调到 3072~4096。"
+        "H3 任务输出较长，建议把\"最大生成长度\"选到 4096。"
     )
 
     def analyze(self, 图像1, 任务类型, 自定义问题, 模型名称, 量化方式, 视觉Token预算,
@@ -278,7 +277,7 @@ class Gemma_Image_Node:
             "prompt": prompt,
             "enable_thinking": 思考模式,
             "visual_token_budget": int(视觉Token预算),
-            "max_new_tokens": 最大生成长度,
+            "max_new_tokens": int(最大生成长度),
             "seed": seed,
         }
         if 图像2 is not None:
@@ -316,9 +315,9 @@ class Gemma_Chat_Node:
                 "运行后立即卸载": ("BOOLEAN", {"default": True}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
                 "下载源": (["ModelScope", "HF Mirror", "HuggingFace"], {"default": "ModelScope"}),
+                "最大生成长度": (GEMMA_NEW_TOKEN_OPTIONS, {"default": "2048"}),
             },
             "optional": {
-                "最大生成长度": ("INT", {"default": 2048, "min": GEMMA_MIN_NEW_TOKENS, "max": GEMMA_MAX_NEW_TOKENS}),
                 # 编号动态输入: 前端默认每类只显示 1 个槽位，连接后自动追加下一个 (上限见 CHAT_MAX_*)；
                 # 子进程给每个媒体插入【图像1】等标签，提示词可按编号精确引用
                 **{f"图像{i}": ("IMAGE",) for i in range(1, CHAT_MAX_IMAGE + 1)},
@@ -341,7 +340,7 @@ class Gemma_Chat_Node:
         "视频接\"加载视频\"的图像序列输出，按\"抽帧数量\"均匀抽帧。支持思考模式。\n"
         "MiniMax H3 系统指令: 文生视频按提示词需求直接生成；参考生视频需先接入参考素材(图像/视频/音频)，"
         "否则无素材可分析。\n"
-        "H3 指令输出较长，建议把\"最大生成长度\"调到 3072~4096。"
+        "H3 指令输出较长，建议把\"最大生成长度\"选到 4096。"
     )
 
     def chat(self, 提示词, 系统指令类型, 模型名称, 量化方式, 最大生成长度, seed,
@@ -356,7 +355,7 @@ class Gemma_Chat_Node:
             "prompt": 提示词,
             "system": GEMMA_SYSTEM_PROMPTS.get(系统指令类型, "You are a helpful assistant."),
             "enable_thinking": 思考模式,
-            "max_new_tokens": 最大生成长度,
+            "max_new_tokens": int(最大生成长度),
             "seed": seed,
         }
         # 按 图像 -> 视频 -> 音频 的固定顺序收集已接入的媒体，编号与插槽名一致
@@ -423,9 +422,7 @@ class Gemma_Audio_Node:
                 "运行后立即卸载": ("BOOLEAN", {"default": True}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
                 "下载源": (["ModelScope", "HF Mirror", "HuggingFace"], {"default": "ModelScope"}),
-            },
-            "optional": {
-                "最大生成长度": ("INT", {"default": 1024, "min": GEMMA_MIN_NEW_TOKENS, "max": GEMMA_MAX_NEW_TOKENS}),
+                "最大生成长度": (GEMMA_NEW_TOKEN_OPTIONS, {"default": "1024"}),
             },
         }
 
@@ -457,7 +454,7 @@ class Gemma_Audio_Node:
                     "quant": 量化方式,
                     "audio_path": tmp_path,
                     "prompt": prompt,
-                    "max_new_tokens": 最大生成长度,
+                    "max_new_tokens": int(最大生成长度),
                     "seed": seed,
                 },
                 unload_after=运行后立即卸载,
@@ -515,10 +512,10 @@ class Gemma_Video_Node:
                 "运行后立即卸载": ("BOOLEAN", {"default": True}),
                 "自动下载模型": ("BOOLEAN", {"default": False}),
                 "下载源": (["ModelScope", "HF Mirror", "HuggingFace"], {"default": "ModelScope"}),
+                "最大生成长度": (GEMMA_NEW_TOKEN_OPTIONS, {"default": "1024"}),
             },
             "optional": {
                 "音频": ("AUDIO",),
-                "最大生成长度": ("INT", {"default": 1024, "min": GEMMA_MIN_NEW_TOKENS, "max": GEMMA_MAX_NEW_TOKENS}),
             },
         }
 
@@ -534,7 +531,7 @@ class Gemma_Video_Node:
         "注意: 画面理解不受语言限制，但可选音频输入不支持中文语音 "
         "(官方音频基准注明 Excluding Chinese)，中文音轨请断开音频或改用 Qwen 语音识别 (ASR) 节点。\n"
         "MiniMax H3 做同款视频: 分析参考视频后生成同款文生视频提示词，自定义问题可补充具体需求。\n"
-        "输出较长，建议把\"最大生成长度\"调到 3072~4096。"
+        "输出较长，建议把\"最大生成长度\"选到 4096。"
     )
 
     def analyze(self, 图像序列, 任务类型, 自定义问题, 抽帧数量, 模型名称, 量化方式,
@@ -559,7 +556,7 @@ class Gemma_Video_Node:
             "image_paths": list(tmp_files),  # 传副本，避免后续追加音频路径污染图像列表
             "prompt": prompt,
             "visual_token_budget": int(视觉Token预算),
-            "max_new_tokens": 最大生成长度,
+            "max_new_tokens": int(最大生成长度),
             "seed": seed,
         }
         if 音频 is not None:
